@@ -13,7 +13,8 @@ import {
   Send,
   Loader,
   Wifi,
-  WifiOff
+  WifiOff,
+  AlertCircle
 } from 'lucide-react';
 import { InterviewConfig } from '../types';
 import { AIInterviewSimulator } from '../utils/aiSimulator';
@@ -40,8 +41,9 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isThinking, setIsThinking] = useState(false);
-  const [isConnected, setIsConnected] = useState(true);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [connectionChecked, setConnectionChecked] = useState(false);
+  const [showConnectionInfo, setShowConnectionInfo] = useState(false);
   
   const {
     isListening,
@@ -82,14 +84,17 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
     try {
       const healthy = await APIService.checkHealth();
       setIsConnected(healthy);
-      if (!healthy) {
-        setConnectionError('Backend service is not responding');
-      } else {
-        setConnectionError(null);
+      setConnectionChecked(true);
+      
+      if (!healthy && !showConnectionInfo) {
+        // Show connection info for first time users
+        setShowConnectionInfo(true);
+        setTimeout(() => setShowConnectionInfo(false), 8000);
       }
     } catch (error) {
+      // This should not happen anymore due to improved error handling in APIService
       setIsConnected(false);
-      setConnectionError('Unable to connect to AI service');
+      setConnectionChecked(true);
     }
   };
 
@@ -122,7 +127,6 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
 
   const loadNextQuestion = async () => {
     setIsThinking(true);
-    setConnectionError(null);
     
     try {
       const question = await simulator.getNextQuestion();
@@ -135,8 +139,7 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
       }
     } catch (error) {
       console.error('Error loading question:', error);
-      setConnectionError('Failed to load next question');
-      setIsConnected(false);
+      // Fallback will be handled by the simulator
     }
     
     setIsThinking(false);
@@ -157,7 +160,7 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
       }
     } catch (error) {
       console.error('Error submitting response:', error);
-      setConnectionError('Failed to submit response');
+      // Continue with fallback behavior
     }
   };
 
@@ -196,34 +199,45 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
                   Duration: {config.duration} minutes
                 </div>
                 <div className="flex items-center mt-2">
-                  {isConnected ? (
-                    <div className="flex items-center text-green-600 text-sm">
-                      <Wifi className="w-4 h-4 mr-1" />
-                      AI Connected
-                    </div>
-                  ) : (
-                    <div className="flex items-center text-red-600 text-sm">
-                      <WifiOff className="w-4 h-4 mr-1" />
-                      AI Offline
-                    </div>
+                  {connectionChecked && (
+                    <>
+                      {isConnected ? (
+                        <div className="flex items-center text-green-600 text-sm">
+                          <Wifi className="w-4 h-4 mr-1" />
+                          AI Connected
+                        </div>
+                      ) : (
+                        <div className="flex items-center text-amber-600 text-sm">
+                          <WifiOff className="w-4 h-4 mr-1" />
+                          Offline Mode
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Connection Error Alert */}
-            {connectionError && (
-              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="flex items-center">
-                  <WifiOff className="w-5 h-5 text-yellow-600 mr-2" />
-                  <span className="text-yellow-800 text-sm">
-                    {connectionError}. Using fallback questions.
-                  </span>
+            {/* Connection Info Alert */}
+            {showConnectionInfo && !isConnected && (
+              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-start">
+                  <AlertCircle className="w-5 h-5 text-blue-600 mr-3 mt-0.5 flex-shrink-0" />
+                  <div className="text-blue-800 text-sm">
+                    <p className="font-medium mb-1">Running in Offline Mode</p>
+                    <p className="mb-2">
+                      The AI backend is not connected. You can still practice with pre-defined questions, 
+                      or start the backend server for AI-powered interviews.
+                    </p>
+                    <p className="text-xs text-blue-600">
+                      To enable AI features: Run <code className="bg-blue-100 px-1 rounded">npm run server</code> in a separate terminal.
+                    </p>
+                  </div>
                   <button
-                    onClick={checkBackendConnection}
-                    className="ml-auto text-yellow-600 hover:text-yellow-800 text-sm underline"
+                    onClick={() => setShowConnectionInfo(false)}
+                    className="ml-auto text-blue-600 hover:text-blue-800 text-sm"
                   >
-                    Retry Connection
+                    ×
                   </button>
                 </div>
               </div>
@@ -286,6 +300,14 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
                 >
                   {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                 </button>
+
+                <button
+                  onClick={checkBackendConnection}
+                  className="p-3 rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200 transition-all"
+                  title="Check AI Connection"
+                >
+                  <Wifi className="w-5 h-5" />
+                </button>
               </div>
             </div>
           </div>
@@ -301,7 +323,7 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">AI Interviewer</h3>
                     <p className="text-sm text-gray-600">
-                      {isConnected ? 'LLM-Powered Interview Assistant' : 'Fallback Interview Assistant'}
+                      {isConnected ? 'LLM-Powered Interview Assistant' : 'Practice Interview Assistant'}
                     </p>
                   </div>
                 </div>

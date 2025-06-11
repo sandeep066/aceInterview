@@ -5,7 +5,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
+  timeout: 5000, // Reduced timeout for faster fallback
   headers: {
     'Content-Type': 'application/json',
   },
@@ -81,7 +81,8 @@ export class APIService {
       const response = await apiClient.get('/health');
       return response.data.status === 'OK';
     } catch (error) {
-      console.error('Health check failed:', error);
+      // Silently handle network errors for health checks
+      // This is expected when backend is not running
       return false;
     }
   }
