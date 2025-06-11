@@ -86,4 +86,41 @@ export class APIService {
       return false;
     }
   }
+
+  // Generic HTTP methods for voice interview service
+  static async get(url: string): Promise<any> {
+    try {
+      return await apiClient.get(url);
+    } catch (error) {
+      console.error(`GET ${url} failed:`, error);
+      throw error;
+    }
+  }
+
+  static async post(url: string, data?: any): Promise<any> {
+    try {
+      return await apiClient.post(url, data);
+    } catch (error) {
+      console.error(`POST ${url} failed:`, error);
+      throw error;
+    }
+  }
+
+  static async put(url: string, data?: any): Promise<any> {
+    try {
+      return await apiClient.put(url, data);
+    } catch (error) {
+      console.error(`PUT ${url} failed:`, error);
+      throw error;
+    }
+  }
+
+  static async delete(url: string): Promise<any> {
+    try {
+      return await apiClient.delete(url);
+    } catch (error) {
+      console.error(`DELETE ${url} failed:`, error);
+      throw error;
+    }
+  }
 }
