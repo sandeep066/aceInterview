@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   BarChart, 
   TrendingUp, 
@@ -8,7 +8,8 @@ import {
   Star,
   ArrowLeft,
   RotateCcw,
-  Download
+  Download,
+  Loader2
 } from 'lucide-react';
 import { AIInterviewSimulator } from '../utils/aiSimulator';
 
@@ -23,7 +24,27 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
   onBackToConfig,
   onRetryInterview
 }) => {
-  const analytics = simulator.generateAnalytics();
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadAnalytics = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const analyticsData = await simulator.generateAnalytics();
+        setAnalytics(analyticsData);
+      } catch (err) {
+        console.error('Error loading analytics:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load analytics');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAnalytics();
+  }, [simulator]);
 
   const getScoreColor = (score: number): string => {
     if (score >= 85) return 'text-green-600 bg-green-100';
@@ -40,6 +61,8 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
   };
 
   const downloadReport = () => {
+    if (!analytics) return;
+    
     const reportData = {
       timestamp: new Date().toISOString(),
       overallScore: analytics.overallScore,
@@ -62,6 +85,66 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Analyzing Your Performance</h2>
+          <p className="text-gray-600">Please wait while we generate your detailed analytics...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-8">
+          <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Target className="w-8 h-8" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Analytics Error</h2>
+          <p className="text-gray-600 mb-6">{error}</p>
+          <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4">
+            <button
+              onClick={onBackToConfig}
+              className="inline-flex items-center px-6 py-3 bg-gray-600 text-white font-semibold rounded-xl hover:bg-gray-700 focus:outline-none focus:ring-4 focus:ring-gray-300 transition-all"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              New Interview
+            </button>
+            <button
+              onClick={onRetryInterview}
+              className="inline-flex items-center px-6 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all"
+            >
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Try Again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!analytics) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">No Analytics Available</h2>
+          <p className="text-gray-600 mb-6">Unable to generate analytics for this interview.</p>
+          <button
+            onClick={onBackToConfig}
+            className="inline-flex items-center px-6 py-3 bg-gray-600 text-white font-semibold rounded-xl hover:bg-gray-700 focus:outline-none focus:ring-4 focus:ring-gray-300 transition-all"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            New Interview
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50">
@@ -104,7 +187,7 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
               </h3>
               
               <div className="space-y-4">
-                {Object.entries(analytics.responseAnalysis).map(([key, score]) => (
+                {analytics.responseAnalysis && Object.entries(analytics.responseAnalysis).map(([key, score]) => (
                   <div key={key} className="flex items-center justify-between">
                     <span className="font-medium text-gray-700 capitalize">
                       {key.replace(/([A-Z])/g, ' $1').trim()}
@@ -116,7 +199,7 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
                           style={{ width: `${score}%` }}
                         />
                       </div>
-                      <span className={`px-2 py-1 rounded-lg text-sm font-semibold ${getScoreColor(score)}`}>
+                      <span className={`px-2 py-1 rounded-lg text-sm font-semibold ${getScoreColor(score as number)}`}>
                         {score}%
                       </span>
                     </div>
@@ -132,7 +215,7 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
               </h3>
               
               <div className="space-y-3">
-                {analytics.strengths.map((strength, index) => (
+                {analytics.strengths && analytics.strengths.map((strength: string, index: number) => (
                   <div key={index} className="flex items-start">
                     <Star className="w-5 h-5 text-green-500 mr-3 mt-0.5 flex-shrink-0" />
                     <span className="text-gray-700">{strength}</span>
@@ -150,7 +233,7 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {analytics.improvements.map((improvement, index) => (
+              {analytics.improvements && analytics.improvements.map((improvement: string, index: number) => (
                 <div key={index} className="bg-orange-50 border border-orange-200 rounded-xl p-4">
                   <div className="flex items-start">
                     <div className="w-2 h-2 bg-orange-500 rounded-full mr-3 mt-2 flex-shrink-0"></div>
@@ -169,7 +252,7 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
             </h3>
             
             <div className="space-y-6">
-              {analytics.questionReviews.map((review, index) => (
+              {analytics.questionReviews && analytics.questionReviews.map((review: any, index: number) => (
                 <div key={review.questionId} className="border border-gray-200 rounded-xl p-6">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
@@ -217,7 +300,8 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
             
             <button
               onClick={downloadReport}
-              className="inline-flex items-center px-6 py-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-300 transition-all"
+              disabled={!analytics}
+              className="inline-flex items-center px-6 py-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="w-4 h-4 mr-2" />
               Download Report
