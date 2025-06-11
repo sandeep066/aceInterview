@@ -14,12 +14,16 @@ import {
   Loader,
   Wifi,
   WifiOff,
-  AlertCircle
+  AlertCircle,
+  Phone,
+  Monitor
 } from 'lucide-react';
 import { InterviewConfig } from '../types';
 import { AIInterviewSimulator } from '../utils/aiSimulator';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { APIService } from '../services/apiService';
+import { VoiceInterviewService } from '../services/voiceInterviewService';
+import { VoiceInterviewScreen } from './VoiceInterviewScreen';
 
 interface InterviewScreenProps {
   config: InterviewConfig;
@@ -28,6 +32,205 @@ interface InterviewScreenProps {
 }
 
 export const InterviewScreen: React.FC<InterviewScreenProps> = ({
+  config,
+  onEndInterview,
+  onBackToConfig
+}) => {
+  const [interviewMode, setInterviewMode] = useState<'text' | 'voice' | null>(null);
+  const [livekitAvailable, setLivekitAvailable] = useState(false);
+  const [checkingLivekit, setCheckingLivekit] = useState(true);
+
+  // Check LiveKit availability on mount
+  useEffect(() => {
+    checkLivekitAvailability();
+  }, []);
+
+  const checkLivekitAvailability = async () => {
+    try {
+      const config = await VoiceInterviewService.checkLiveKitConfig();
+      setLivekitAvailable(config.configured);
+    } catch (error) {
+      console.error('Error checking LiveKit config:', error);
+      setLivekitAvailable(false);
+    } finally {
+      setCheckingLivekit(false);
+    }
+  };
+
+  // If mode is selected, render the appropriate interview screen
+  if (interviewMode === 'voice') {
+    return (
+      <VoiceInterviewScreen
+        config={config}
+        onEndInterview={onEndInterview}
+        onBackToConfig={onBackToConfig}
+      />
+    );
+  }
+
+  if (interviewMode === 'text') {
+    return (
+      <TextInterviewScreen
+        config={config}
+        onEndInterview={onEndInterview}
+        onBackToConfig={onBackToConfig}
+      />
+    );
+  }
+
+  // Mode selection screen
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+      <div className="container mx-auto px-4 py-12">
+        <div className="max-w-4xl mx-auto">
+          {/* Header */}
+          <div className="text-center mb-12">
+            <h1 className="text-4xl font-bold text-gray-900 mb-4">
+              Choose Your Interview Mode
+            </h1>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              Select how you'd like to conduct your {config.style} interview practice session
+            </p>
+          </div>
+
+          {/* Loading State */}
+          {checkingLivekit && (
+            <div className="text-center mb-8">
+              <Loader className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-4" />
+              <p className="text-gray-600">Checking voice interview availability...</p>
+            </div>
+          )}
+
+          {/* Mode Selection Cards */}
+          {!checkingLivekit && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+              {/* Voice Interview Mode */}
+              <div className={`bg-white rounded-3xl shadow-xl p-8 border-2 transition-all hover:shadow-2xl ${
+                livekitAvailable 
+                  ? 'border-green-200 hover:border-green-300 cursor-pointer' 
+                  : 'border-gray-200 opacity-75'
+              }`}>
+                <div className="text-center">
+                  <div className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-6 ${
+                    livekitAvailable ? 'bg-green-600 text-white' : 'bg-gray-400 text-white'
+                  }`}>
+                    <Phone className="w-8 h-8" />
+                  </div>
+                  
+                  <h3 className="text-2xl font-bold text-gray-900 mb-4">
+                    Voice Interview
+                  </h3>
+                  
+                  <p className="text-gray-600 mb-6">
+                    Real-time voice conversation with AI interviewer using LiveKit technology. 
+                    Practice natural speaking and get immediate feedback.
+                  </p>
+
+                  <div className="space-y-3 mb-6">
+                    <div className="flex items-center text-sm text-gray-700">
+                      <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                      Real-time voice communication
+                    </div>
+                    <div className="flex items-center text-sm text-gray-700">
+                      <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                      Speech-to-text transcription
+                    </div>
+                    <div className="flex items-center text-sm text-gray-700">
+                      <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                      Natural conversation flow
+                    </div>
+                    <div className="flex items-center text-sm text-gray-700">
+                      <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                      Audio quality analysis
+                    </div>
+                  </div>
+
+                  {livekitAvailable ? (
+                    <button
+                      onClick={() => setInterviewMode('voice')}
+                      className="w-full inline-flex items-center justify-center px-6 py-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-300 transition-all"
+                    >
+                      <Phone className="w-4 h-4 mr-2" />
+                      Start Voice Interview
+                    </button>
+                  ) : (
+                    <div className="text-center">
+                      <div className="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm mb-3">
+                        <AlertCircle className="w-4 h-4 mr-2" />
+                        LiveKit Not Configured
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Voice interviews require LiveKit configuration in the backend
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Text Interview Mode */}
+              <div className="bg-white rounded-3xl shadow-xl p-8 border-2 border-blue-200 hover:border-blue-300 transition-all hover:shadow-2xl cursor-pointer">
+                <div className="text-center">
+                  <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 text-white rounded-2xl mb-6">
+                    <Monitor className="w-8 h-8" />
+                  </div>
+                  
+                  <h3 className="text-2xl font-bold text-gray-900 mb-4">
+                    Text Interview
+                  </h3>
+                  
+                  <p className="text-gray-600 mb-6">
+                    Traditional text-based interview with AI-generated questions. 
+                    Type your responses and get detailed feedback.
+                  </p>
+
+                  <div className="space-y-3 mb-6">
+                    <div className="flex items-center text-sm text-gray-700">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
+                      AI-powered question generation
+                    </div>
+                    <div className="flex items-center text-sm text-gray-700">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
+                      Detailed response analysis
+                    </div>
+                    <div className="flex items-center text-sm text-gray-700">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
+                      Works offline
+                    </div>
+                    <div className="flex items-center text-sm text-gray-700">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
+                      Comprehensive analytics
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setInterviewMode('text')}
+                    className="w-full inline-flex items-center justify-center px-6 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all"
+                  >
+                    <Monitor className="w-4 h-4 mr-2" />
+                    Start Text Interview
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Back Button */}
+          <div className="text-center">
+            <button
+              onClick={onBackToConfig}
+              className="inline-flex items-center px-6 py-3 bg-gray-600 text-white font-semibold rounded-xl hover:bg-gray-700 focus:outline-none focus:ring-4 focus:ring-gray-300 transition-all"
+            >
+              ← Back to Configuration
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Text Interview Component (existing functionality)
+const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
   config,
   onEndInterview,
   onBackToConfig
@@ -87,12 +290,10 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
       setConnectionChecked(true);
       
       if (!healthy && !showConnectionInfo) {
-        // Show connection info for first time users
         setShowConnectionInfo(true);
         setTimeout(() => setShowConnectionInfo(false), 8000);
       }
     } catch (error) {
-      // This should not happen anymore due to improved error handling in APIService
       setIsConnected(false);
       setConnectionChecked(true);
     }
@@ -139,7 +340,6 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
       }
     } catch (error) {
       console.error('Error loading question:', error);
-      // Fallback will be handled by the simulator
     }
     
     setIsThinking(false);
@@ -160,7 +360,6 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
       }
     } catch (error) {
       console.error('Error submitting response:', error);
-      // Continue with fallback behavior
     }
   };
 
@@ -182,8 +381,9 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
           <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  {config.style.charAt(0).toUpperCase() + config.style.slice(1).replace('-', ' ')} Interview
+                <h1 className="text-2xl font-bold text-gray-900 flex items-center">
+                  <Monitor className="w-6 h-6 mr-2 text-blue-600" />
+                  Text Interview - {config.style.charAt(0).toUpperCase() + config.style.slice(1).replace('-', ' ')}
                 </h1>
                 <p className="text-gray-600">Topic: {config.topic}</p>
                 {config.companyName && (
