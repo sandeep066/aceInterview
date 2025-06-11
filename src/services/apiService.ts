@@ -1,0 +1,88 @@
+import axios from 'axios';
+import { InterviewConfig, AnalyticsData, InterviewResponse } from '../types';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+export interface QuestionGenerationRequest {
+  config: InterviewConfig;
+  previousQuestions?: string[];
+  previousResponses?: InterviewResponse[];
+  questionNumber?: number;
+}
+
+export interface FollowUpRequest {
+  question: string;
+  response: string;
+  config: InterviewConfig;
+}
+
+export interface ResponseAnalysisRequest {
+  question: string;
+  response: string;
+  config: InterviewConfig;
+}
+
+export interface AnalyticsRequest {
+  responses: InterviewResponse[];
+  config: InterviewConfig;
+}
+
+export class APIService {
+  static async generateQuestion(request: QuestionGenerationRequest): Promise<string> {
+    try {
+      const response = await apiClient.post('/generate-question', request);
+      return response.data.question;
+    } catch (error) {
+      console.error('Error generating question:', error);
+      throw new Error('Failed to generate question. Please try again.');
+    }
+  }
+
+  static async generateFollowUp(request: FollowUpRequest): Promise<string> {
+    try {
+      const response = await apiClient.post('/generate-followup', request);
+      return response.data.followUp;
+    } catch (error) {
+      console.error('Error generating follow-up:', error);
+      throw new Error('Failed to generate follow-up question.');
+    }
+  }
+
+  static async analyzeResponse(request: ResponseAnalysisRequest): Promise<any> {
+    try {
+      const response = await apiClient.post('/analyze-response', request);
+      return response.data.analysis;
+    } catch (error) {
+      console.error('Error analyzing response:', error);
+      throw new Error('Failed to analyze response.');
+    }
+  }
+
+  static async generateAnalytics(request: AnalyticsRequest): Promise<AnalyticsData> {
+    try {
+      const response = await apiClient.post('/generate-analytics', request);
+      return response.data.analytics;
+    } catch (error) {
+      console.error('Error generating analytics:', error);
+      throw new Error('Failed to generate analytics.');
+    }
+  }
+
+  static async checkHealth(): Promise<boolean> {
+    try {
+      const response = await apiClient.get('/health');
+      return response.data.status === 'OK';
+    } catch (error) {
+      console.error('Health check failed:', error);
+      return false;
+    }
+  }
+}

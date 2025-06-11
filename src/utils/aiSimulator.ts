@@ -1,65 +1,114 @@
 import { InterviewConfig, Question, AnalyticsData, InterviewResponse } from '../types';
-import { questionBank } from '../data/questions';
+import { APIService } from '../services/apiService';
 
 export class AIInterviewSimulator {
   private config: InterviewConfig;
-  private currentQuestions: Question[];
   private currentQuestionIndex: number;
   private startTime: number;
   private responses: InterviewResponse[];
+  private generatedQuestions: string[];
+  private isUsingLLM: boolean;
 
   constructor(config: InterviewConfig) {
     this.config = config;
-    this.currentQuestions = this.generateQuestions();
     this.currentQuestionIndex = 0;
     this.startTime = Date.now();
     this.responses = [];
+    this.generatedQuestions = [];
+    this.isUsingLLM = true;
   }
 
-  private generateQuestions(): Question[] {
-    const questions = questionBank[this.config.style][this.config.experienceLevel] || [];
-    // Shuffle and take first 3-5 questions based on duration
-    const numQuestions = Math.min(
-      Math.max(3, Math.floor(this.config.duration / 15)),
-      questions.length
-    );
-    
-    return questions
-      .sort(() => Math.random() - 0.5)
-      .slice(0, numQuestions)
-      .map((q, index) => ({
-        ...q,
-        text: this.customizeQuestion(q.text)
-      }));
-  }
+  async getNextQuestion(): Promise<string | null> {
+    try {
+      // Check if we've reached the maximum questions based on duration
+      const maxQuestions = Math.min(
+        Math.max(3, Math.floor(this.config.duration / 15)),
+        8
+      );
 
-  private customizeQuestion(question: string): string {
-    if (this.config.companyName && Math.random() > 0.5) {
-      // 50% chance to customize with company name
-      const companyVariations = [
-        `At ${this.config.companyName}, ${question.toLowerCase()}`,
-        `${question} Specifically in the context of ${this.config.companyName}.`,
-        `Considering ${this.config.companyName}'s business model, ${question.toLowerCase()}`
-      ];
-      return companyVariations[Math.floor(Math.random() * companyVariations.length)];
+      if (this.currentQuestionIndex >= maxQuestions) {
+        return null;
+      }
+
+      if (this.isUsingLLM) {
+        const question = await APIService.generateQuestion({
+          config: this.config,
+          previousQuestions: this.generatedQuestions,
+          previousResponses: this.responses,
+          questionNumber: this.currentQuestionIndex + 1
+        });
+
+        this.generatedQuestions.push(question);
+        return question;
+      } else {
+        // Fallback to predefined questions
+        return this.getFallbackQuestion();
+      }
+    } catch (error) {
+      console.error('Error getting next question:', error);
+      // Fallback to predefined questions if LLM fails
+      this.isUsingLLM = false;
+      return this.getFallbackQuestion();
     }
-    return question;
   }
 
-  getCurrentQuestion(): Question | null {
-    if (this.currentQuestionIndex >= this.currentQuestions.length) {
+  private getFallbackQuestion(): string | null {
+    const fallbackQuestions = {
+      technical: [
+        "Explain the difference between synchronous and asynchronous programming.",
+        "How would you optimize the performance of a web application?",
+        "Describe your approach to debugging a complex issue.",
+        "What are the key principles of good software design?",
+        "How do you ensure code quality in your projects?"
+      ],
+      hr: [
+        "Tell me about yourself and your career goals.",
+        "Why are you interested in this position?",
+        "How do you handle working under pressure?",
+        "What motivates you in your work?",
+        "Where do you see yourself in 5 years?"
+      ],
+      behavioral: [
+        "Tell me about a challenging project you worked on.",
+        "Describe a time when you had to work with a difficult team member.",
+        "Give me an example of when you had to learn something new quickly.",
+        "Tell me about a time you failed and how you handled it.",
+        "Describe a situation where you had to make a difficult decision."
+      ],
+      'salary-negotiation': [
+        "What are your salary expectations for this role?",
+        "How do you evaluate the total compensation package?",
+        "What factors are most important to you besides salary?",
+        "How flexible are you with your compensation requirements?",
+        "What would make you accept an offer below your expectations?"
+      ],
+      'case-study': [
+        "How would you approach designing a system for handling high traffic?",
+        "Walk me through how you would solve a performance issue.",
+        "Describe your process for making technical decisions.",
+        "How would you handle a critical production incident?",
+        "What's your approach to evaluating new technologies?"
+      ]
+    };
+
+    const questions = fallbackQuestions[this.config.style] || fallbackQuestions.technical;
+    
+    if (this.currentQuestionIndex >= questions.length) {
       return null;
     }
-    return this.currentQuestions[this.currentQuestionIndex];
+
+    return questions[this.currentQuestionIndex];
   }
 
-  submitResponse(response: string): void {
-    const currentQuestion = this.getCurrentQuestion();
+  async submitResponse(response: string): Promise<void> {
+    const currentQuestion = this.generatedQuestions[this.currentQuestionIndex] || 
+                           this.getFallbackQuestion();
+    
     if (!currentQuestion) return;
 
     const responseData: InterviewResponse = {
-      questionId: currentQuestion.id,
-      question: currentQuestion.text,
+      questionId: `q${this.currentQuestionIndex + 1}`,
+      question: currentQuestion,
       response,
       timestamp: Date.now(),
       duration: Date.now() - this.startTime
@@ -67,47 +116,77 @@ export class AIInterviewSimulator {
 
     this.responses.push(responseData);
     this.currentQuestionIndex++;
+
+    // Optionally analyze the response in real-time
+    if (this.isUsingLLM) {
+      try {
+        await APIService.analyzeResponse({
+          question: currentQuestion,
+          response,
+          config: this.config
+        });
+      } catch (error) {
+        console.error('Error analyzing response:', error);
+      }
+    }
   }
 
-  getNextQuestion(): string | null {
-    const question = this.getCurrentQuestion();
-    if (!question) return null;
+  async generateFollowUp(previousResponse: string): Promise<string | null> {
+    if (!this.isUsingLLM) return null;
 
-    // Generate contextual follow-up or next question
-    const responses = [
-      question.text,
-      "That's interesting. " + question.text,
-      "I see. Let me ask you this: " + question.text,
-      "Good point. Building on that, " + question.text.toLowerCase()
-    ];
+    try {
+      const currentQuestion = this.generatedQuestions[this.currentQuestionIndex - 1];
+      if (!currentQuestion) return null;
 
-    return responses[Math.floor(Math.random() * responses.length)];
-  }
-
-  getFollowUpQuestion(previousResponse: string): string | null {
-    const currentQuestion = this.getCurrentQuestion();
-    if (!currentQuestion?.followUp) return null;
-
-    const followUps = currentQuestion.followUp;
-    return followUps[Math.floor(Math.random() * followUps.length)];
+      return await APIService.generateFollowUp({
+        question: currentQuestion,
+        response: previousResponse,
+        config: this.config
+      });
+    } catch (error) {
+      console.error('Error generating follow-up:', error);
+      return null;
+    }
   }
 
   isInterviewComplete(): boolean {
-    return this.currentQuestionIndex >= this.currentQuestions.length;
+    const maxQuestions = Math.min(
+      Math.max(3, Math.floor(this.config.duration / 15)),
+      8
+    );
+    return this.currentQuestionIndex >= maxQuestions;
   }
 
   getProgress(): { current: number; total: number; percentage: number } {
-    const total = this.currentQuestions.length;
-    const current = Math.min(this.currentQuestionIndex + 1, total);
-    const percentage = (current / total) * 100;
+    const maxQuestions = Math.min(
+      Math.max(3, Math.floor(this.config.duration / 15)),
+      8
+    );
+    const current = Math.min(this.currentQuestionIndex + 1, maxQuestions);
+    const percentage = (current / maxQuestions) * 100;
     
-    return { current, total, percentage };
+    return { current, total: maxQuestions, percentage };
   }
 
-  generateAnalytics(): AnalyticsData {
+  async generateAnalytics(): Promise<AnalyticsData> {
+    if (this.isUsingLLM && this.responses.length > 0) {
+      try {
+        return await APIService.generateAnalytics({
+          responses: this.responses,
+          config: this.config
+        });
+      } catch (error) {
+        console.error('Error generating LLM analytics:', error);
+      }
+    }
+
+    // Fallback analytics
+    return this.generateFallbackAnalytics();
+  }
+
+  private generateFallbackAnalytics(): AnalyticsData {
     const totalResponses = this.responses.length;
     
-    // Simulate AI analysis with realistic scoring
     const responseAnalysis = {
       clarity: this.calculateClarityScore(),
       structure: this.calculateStructureScore(),
@@ -134,14 +213,12 @@ export class AIInterviewSimulator {
   }
 
   private calculateClarityScore(): number {
-    // Simulate clarity scoring based on response length and structure
     const avgLength = this.responses.reduce((sum, r) => sum + r.response.length, 0) / this.responses.length;
     const clarityScore = Math.min(95, Math.max(60, 70 + (avgLength / 50)));
     return Math.round(clarityScore);
   }
 
   private calculateStructureScore(): number {
-    // Check for structured responses (keywords like "first", "second", "because", etc.)
     const structureKeywords = ['first', 'second', 'third', 'because', 'therefore', 'however', 'additionally'];
     let structuredResponses = 0;
 
@@ -157,9 +234,8 @@ export class AIInterviewSimulator {
   }
 
   private calculateTechnicalScore(): number {
-    if (this.config.style !== 'technical') return 75; // Default for non-technical
+    if (this.config.style !== 'technical') return 75;
 
-    // Simulate technical accuracy based on response content
     const technicalKeywords = ['function', 'variable', 'class', 'method', 'algorithm', 'data structure', 'performance', 'optimization'];
     let technicalResponses = 0;
 
@@ -175,14 +251,12 @@ export class AIInterviewSimulator {
   }
 
   private calculateCommunicationScore(): number {
-    // Based on response completeness and engagement
     const avgResponseLength = this.responses.reduce((sum, r) => sum + r.response.length, 0) / this.responses.length;
     const communicationScore = Math.min(95, Math.max(55, 65 + (avgResponseLength / 40)));
     return Math.round(communicationScore);
   }
 
   private calculateConfidenceScore(): number {
-    // Simulate confidence based on response length and certainty indicators
     const confidenceIndicators = ['definitely', 'certainly', 'confident', 'sure', 'absolutely', 'clearly'];
     const uncertaintyIndicators = ['maybe', 'perhaps', 'might', 'not sure', 'think', 'probably'];
     
@@ -211,15 +285,6 @@ export class AIInterviewSimulator {
     if (analysis.communication >= 80) strengths.push("Excellent communication skills");
     if (analysis.confidence >= 80) strengths.push("Confident and decisive responses");
     
-    // Add experience-level specific strengths
-    if (this.config.experienceLevel === 'senior' || this.config.experienceLevel === 'lead-manager') {
-      strengths.push("Demonstrates leadership potential");
-    }
-    
-    if (this.config.style === 'behavioral') {
-      strengths.push("Good use of specific examples and situations");
-    }
-
     return strengths.length > 0 ? strengths : ["Shows enthusiasm and willingness to learn"];
   }
 
@@ -232,36 +297,24 @@ export class AIInterviewSimulator {
     if (analysis.communication < 70) improvements.push("Practice active listening and more engaging responses");
     if (analysis.confidence < 70) improvements.push("Build confidence through more practice and preparation");
     
-    // Add style-specific improvements
-    if (this.config.style === 'behavioral') {
-      improvements.push("Include more specific examples with quantifiable results");
-    }
-    
-    if (this.config.style === 'technical') {
-      improvements.push("Consider edge cases and scalability in technical solutions");
-    }
-
     return improvements.length > 0 ? improvements : ["Continue practicing interview scenarios"];
   }
 
   private generateQuestionReviews() {
     return this.responses.map((response, index) => {
-      const question = this.currentQuestions[index];
-      const score = Math.round(60 + Math.random() * 35); // Random score between 60-95
+      const score = Math.round(60 + Math.random() * 35);
       
       const feedbacks = [
         "Good response with relevant examples. Consider adding more specific details.",
         "Well-structured answer. Could benefit from mentioning potential challenges.",
-        "Solid technical understanding shown. Try to explain concepts more simply.",
+        "Solid understanding shown. Try to explain concepts more simply.",
         "Great use of specific examples. Consider discussing lessons learned.",
-        "Clear communication demonstrated. Could explore alternative approaches.",
-        "Good problem-solving approach. Think about scalability considerations.",
-        "Nice personal insight shared. Could strengthen with metrics or outcomes."
+        "Clear communication demonstrated. Could explore alternative approaches."
       ];
 
       return {
-        questionId: question.id,
-        question: question.text,
+        questionId: response.questionId,
+        question: response.question,
         response: response.response,
         score,
         feedback: feedbacks[Math.floor(Math.random() * feedbacks.length)]

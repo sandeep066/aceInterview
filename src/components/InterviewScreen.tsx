@@ -11,11 +11,14 @@ import {
   Clock,
   FileText,
   Send,
-  Loader
+  Loader,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import { InterviewConfig } from '../types';
 import { AIInterviewSimulator } from '../utils/aiSimulator';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
+import { APIService } from '../services/apiService';
 
 interface InterviewScreenProps {
   config: InterviewConfig;
@@ -37,6 +40,8 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isThinking, setIsThinking] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   
   const {
     isListening,
@@ -49,6 +54,11 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
 
   const responseRef = useRef<HTMLTextAreaElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
+
+  // Check backend connection on mount
+  useEffect(() => {
+    checkBackendConnection();
+  }, []);
 
   // Timer effect
   useEffect(() => {
@@ -67,6 +77,21 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
       setTextResponse(transcript);
     }
   }, [transcript]);
+
+  const checkBackendConnection = async () => {
+    try {
+      const healthy = await APIService.checkHealth();
+      setIsConnected(healthy);
+      if (!healthy) {
+        setConnectionError('Backend service is not responding');
+      } else {
+        setConnectionError(null);
+      }
+    } catch (error) {
+      setIsConnected(false);
+      setConnectionError('Unable to connect to AI service');
+    }
+  };
 
   const formatTime = (ms: number): string => {
     const minutes = Math.floor(ms / 60000);
@@ -97,17 +122,21 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
 
   const loadNextQuestion = async () => {
     setIsThinking(true);
+    setConnectionError(null);
     
-    // Simulate AI thinking time
-    await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
-    
-    const question = simulator.getNextQuestion();
-    if (question) {
-      setCurrentQuestion(question);
-      setTextResponse('');
-      resetTranscript();
-    } else {
-      endInterview();
+    try {
+      const question = await simulator.getNextQuestion();
+      if (question) {
+        setCurrentQuestion(question);
+        setTextResponse('');
+        resetTranscript();
+      } else {
+        endInterview();
+      }
+    } catch (error) {
+      console.error('Error loading question:', error);
+      setConnectionError('Failed to load next question');
+      setIsConnected(false);
     }
     
     setIsThinking(false);
@@ -117,12 +146,18 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
     if (!textResponse.trim()) return;
 
     stopListening();
-    simulator.submitResponse(textResponse.trim());
     
-    if (simulator.isInterviewComplete()) {
-      endInterview();
-    } else {
-      await loadNextQuestion();
+    try {
+      await simulator.submitResponse(textResponse.trim());
+      
+      if (simulator.isInterviewComplete()) {
+        endInterview();
+      } else {
+        await loadNextQuestion();
+      }
+    } catch (error) {
+      console.error('Error submitting response:', error);
+      setConnectionError('Failed to submit response');
     }
   };
 
@@ -160,8 +195,39 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
                 <div className="text-sm text-gray-600">
                   Duration: {config.duration} minutes
                 </div>
+                <div className="flex items-center mt-2">
+                  {isConnected ? (
+                    <div className="flex items-center text-green-600 text-sm">
+                      <Wifi className="w-4 h-4 mr-1" />
+                      AI Connected
+                    </div>
+                  ) : (
+                    <div className="flex items-center text-red-600 text-sm">
+                      <WifiOff className="w-4 h-4 mr-1" />
+                      AI Offline
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
+
+            {/* Connection Error Alert */}
+            {connectionError && (
+              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-center">
+                  <WifiOff className="w-5 h-5 text-yellow-600 mr-2" />
+                  <span className="text-yellow-800 text-sm">
+                    {connectionError}. Using fallback questions.
+                  </span>
+                  <button
+                    onClick={checkBackendConnection}
+                    className="ml-auto text-yellow-600 hover:text-yellow-800 text-sm underline"
+                  >
+                    Retry Connection
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Progress Bar */}
             <div className="mb-4">
@@ -234,7 +300,9 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">AI Interviewer</h3>
-                    <p className="text-sm text-gray-600">Professional Interview Assistant</p>
+                    <p className="text-sm text-gray-600">
+                      {isConnected ? 'LLM-Powered Interview Assistant' : 'Fallback Interview Assistant'}
+                    </p>
                   </div>
                 </div>
 
@@ -242,7 +310,9 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
                   {isThinking ? (
                     <div className="flex items-center justify-center h-full">
                       <Loader className="w-6 h-6 text-blue-600 animate-spin mr-3" />
-                      <span className="text-gray-600">Preparing next question...</span>
+                      <span className="text-gray-600">
+                        {isConnected ? 'AI is generating your next question...' : 'Preparing next question...'}
+                      </span>
                     </div>
                   ) : currentQuestion ? (
                     <div>
