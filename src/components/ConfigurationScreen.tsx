@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, Play, Clock, Building, User, BookOpen } from 'lucide-react';
+import { Settings, Play, Clock, Building, User, BookOpen, ChevronDown } from 'lucide-react';
 import { InterviewConfig, InterviewStyle, ExperienceLevel } from '../types';
 
 interface ConfigurationScreenProps {
@@ -34,6 +34,8 @@ export const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({ onStar
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showStyleDropdown, setShowStyleDropdown] = useState(false);
+  const [showExperienceDropdown, setShowExperienceDropdown] = useState(false);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -60,6 +62,9 @@ export const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({ onStar
       setErrors(prev => ({ ...prev, topic: '' }));
     }
   };
+
+  const selectedStyle = interviewStyles.find(style => style.value === config.style);
+  const selectedExperience = experienceLevels.find(level => level.value === config.experienceLevel);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
@@ -103,36 +108,48 @@ export const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({ onStar
                   )}
                 </div>
 
-                {/* Experience Level */}
+                {/* Interview Style Dropdown */}
                 <div>
                   <label className="flex items-center text-sm font-semibold text-gray-700 mb-3">
-                    <User className="w-4 h-4 mr-2 text-blue-600" />
-                    Experience Level
+                    <Settings className="w-4 h-4 mr-2 text-blue-600" />
+                    Interview Style
                   </label>
-                  <div className="space-y-2">
-                    {experienceLevels.map((level) => (
-                      <label
-                        key={level.value}
-                        className={`flex items-start p-3 border-2 rounded-xl cursor-pointer transition-all hover:bg-blue-50 ${
-                          config.experienceLevel === level.value
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-gray-200'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="experienceLevel"
-                          value={level.value}
-                          checked={config.experienceLevel === level.value}
-                          onChange={(e) => updateConfig({ experienceLevel: e.target.value as ExperienceLevel })}
-                          className="mt-1 text-blue-600"
-                        />
-                        <div className="ml-3">
-                          <div className="font-medium text-gray-900">{level.label}</div>
-                          <div className="text-sm text-gray-600">{level.description}</div>
-                        </div>
-                      </label>
-                    ))}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowStyleDropdown(!showStyleDropdown);
+                        setShowExperienceDropdown(false);
+                      }}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors bg-white text-left flex items-center justify-between hover:bg-purple-50"
+                    >
+                      <div>
+                        <div className="font-medium text-gray-900">{selectedStyle?.label}</div>
+                        <div className="text-sm text-gray-600">{selectedStyle?.description}</div>
+                      </div>
+                      <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${showStyleDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    
+                    {showStyleDropdown && (
+                      <div className="absolute z-10 w-full mt-2 bg-white border-2 border-gray-200 rounded-xl shadow-lg max-h-64 overflow-y-auto">
+                        {interviewStyles.map((style) => (
+                          <button
+                            key={style.value}
+                            type="button"
+                            onClick={() => {
+                              updateConfig({ style: style.value });
+                              setShowStyleDropdown(false);
+                            }}
+                            className={`w-full p-3 text-left hover:bg-purple-50 transition-colors border-b border-gray-100 last:border-b-0 ${
+                              config.style === style.value ? 'bg-purple-50 border-purple-200' : ''
+                            }`}
+                          >
+                            <div className="font-medium text-gray-900">{style.label}</div>
+                            <div className="text-sm text-gray-600">{style.description}</div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -157,36 +174,48 @@ export const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({ onStar
 
               {/* Right Column */}
               <div className="space-y-6">
-                {/* Interview Style */}
+                {/* Experience Level Dropdown */}
                 <div>
                   <label className="flex items-center text-sm font-semibold text-gray-700 mb-3">
-                    <Settings className="w-4 h-4 mr-2 text-blue-600" />
-                    Interview Style
+                    <User className="w-4 h-4 mr-2 text-blue-600" />
+                    Experience Level
                   </label>
-                  <div className="space-y-2">
-                    {interviewStyles.map((style) => (
-                      <label
-                        key={style.value}
-                        className={`flex items-start p-3 border-2 rounded-xl cursor-pointer transition-all hover:bg-purple-50 ${
-                          config.style === style.value
-                            ? 'border-purple-500 bg-purple-50'
-                            : 'border-gray-200'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="style"
-                          value={style.value}
-                          checked={config.style === style.value}
-                          onChange={(e) => updateConfig({ style: e.target.value as InterviewStyle })}
-                          className="mt-1 text-purple-600"
-                        />
-                        <div className="ml-3">
-                          <div className="font-medium text-gray-900">{style.label}</div>
-                          <div className="text-sm text-gray-600">{style.description}</div>
-                        </div>
-                      </label>
-                    ))}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowExperienceDropdown(!showExperienceDropdown);
+                        setShowStyleDropdown(false);
+                      }}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white text-left flex items-center justify-between hover:bg-blue-50"
+                    >
+                      <div>
+                        <div className="font-medium text-gray-900">{selectedExperience?.label}</div>
+                        <div className="text-sm text-gray-600">{selectedExperience?.description}</div>
+                      </div>
+                      <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${showExperienceDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    
+                    {showExperienceDropdown && (
+                      <div className="absolute z-10 w-full mt-2 bg-white border-2 border-gray-200 rounded-xl shadow-lg max-h-64 overflow-y-auto">
+                        {experienceLevels.map((level) => (
+                          <button
+                            key={level.value}
+                            type="button"
+                            onClick={() => {
+                              updateConfig({ experienceLevel: level.value });
+                              setShowExperienceDropdown(false);
+                            }}
+                            className={`w-full p-3 text-left hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-b-0 ${
+                              config.experienceLevel === level.value ? 'bg-blue-50 border-blue-200' : ''
+                            }`}
+                          >
+                            <div className="font-medium text-gray-900">{level.label}</div>
+                            <div className="text-sm text-gray-600">{level.description}</div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -217,6 +246,17 @@ export const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({ onStar
                         <span className="font-medium text-gray-900">{duration} minutes</span>
                       </label>
                     ))}
+                  </div>
+                </div>
+
+                {/* Additional spacing for visual balance */}
+                <div className="pt-8">
+                  <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-6">
+                    <h3 className="font-semibold text-gray-900 mb-2">Ready to Practice?</h3>
+                    <p className="text-sm text-gray-600">
+                      Your AI interviewer will adapt questions based on your configuration. 
+                      Make sure you're in a quiet environment and have a good microphone setup.
+                    </p>
                   </div>
                 </div>
               </div>
