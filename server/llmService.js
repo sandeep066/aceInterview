@@ -4,18 +4,26 @@ export class LLMQuestionGenerator {
     this.provider = process.env.LLM_PROVIDER || 'openai'; // 'openai' or 'anthropic'
     this.baseURL = this.getBaseURL();
     
-    // Initialize agentic orchestrator
-    this.initializeAgenticFramework();
+    // Initialize agentic frameworks
+    this.initializeAgenticFrameworks();
   }
 
-  async initializeAgenticFramework() {
+  async initializeAgenticFrameworks() {
     try {
+      // Initialize question generation framework
       const { AgenticOrchestrator } = await import('./agents/agenticOrchestrator.js');
       this.agenticOrchestrator = new AgenticOrchestrator(this);
-      console.log('✅ Agentic framework initialized successfully');
+      console.log('✅ Question generation agentic framework initialized successfully');
+      
+      // Initialize performance analysis framework
+      const { PerformanceAnalysisOrchestrator } = await import('./agents/performanceAnalysisOrchestrator.js');
+      this.performanceAnalysisOrchestrator = new PerformanceAnalysisOrchestrator(this);
+      console.log('✅ Performance analysis agentic framework initialized successfully');
+      
     } catch (error) {
-      console.error('❌ Failed to initialize agentic framework:', error);
+      console.error('❌ Failed to initialize agentic frameworks:', error);
       this.agenticOrchestrator = null;
+      this.performanceAnalysisOrchestrator = null;
     }
   }
 
@@ -237,6 +245,28 @@ Return a JSON object with this structure:
   }
 
   async generateComprehensiveAnalytics({ responses, config }) {
+    // Try agentic performance analysis first
+    if (this.performanceAnalysisOrchestrator) {
+      try {
+        console.log('🧠 Using agentic framework for performance analysis');
+        const analytics = await this.performanceAnalysisOrchestrator.generateComprehensiveAnalytics({
+          responses,
+          config
+        });
+        
+        console.log('✅ Agentic performance analysis completed successfully');
+        return analytics;
+      } catch (error) {
+        console.error('❌ Agentic performance analysis failed, falling back to traditional method:', error);
+      }
+    }
+
+    // Fallback to traditional analysis
+    console.log('📊 Using traditional analytics approach');
+    return this.generateComprehensiveAnalyticsTraditional({ responses, config });
+  }
+
+  async generateComprehensiveAnalyticsTraditional({ responses, config }) {
     const systemPrompt = `You are an expert interview analyst providing comprehensive feedback on an entire interview session.
 
 Interview Context:
@@ -334,9 +364,12 @@ Provide comprehensive analytics in this JSON format:
 
   // Get agentic framework statistics
   getAgenticStats() {
-    if (this.agenticOrchestrator) {
-      return this.agenticOrchestrator.getSessionStats();
-    }
-    return { status: 'not_initialized' };
+    const questionStats = this.agenticOrchestrator ? this.agenticOrchestrator.getSessionStats() : { status: 'not_initialized' };
+    const analysisStats = this.performanceAnalysisOrchestrator ? this.performanceAnalysisOrchestrator.getAnalysisStats() : { status: 'not_initialized' };
+    
+    return {
+      questionGeneration: questionStats,
+      performanceAnalysis: analysisStats
+    };
   }
 }
