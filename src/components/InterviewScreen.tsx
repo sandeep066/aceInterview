@@ -17,7 +17,8 @@ import {
   AlertCircle,
   Phone,
   Monitor,
-  Brain
+  Brain,
+  Zap
 } from 'lucide-react';
 import { InterviewConfig } from '../types';
 import { AIInterviewSimulator } from '../utils/aiSimulator';
@@ -191,7 +192,7 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
                     </div>
                     <div className="flex items-center text-sm text-gray-700">
                       <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
-                      Detailed response analysis
+                      Instant response processing
                     </div>
                     <div className="flex items-center text-sm text-gray-700">
                       <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
@@ -230,7 +231,7 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
   );
 };
 
-// Text Interview Component (existing functionality)
+// Text Interview Component (optimized for performance)
 const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
   config,
   onEndInterview,
@@ -249,6 +250,7 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
   const [connectionChecked, setConnectionChecked] = useState(false);
   const [showConnectionInfo, setShowConnectionInfo] = useState(false);
   const [isLoadingQuestion, setIsLoadingQuestion] = useState(false);
+  const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
   
   const {
     isListening,
@@ -376,10 +378,18 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
   const submitResponse = async () => {
     if (!textResponse.trim()) return;
 
+    setIsSubmittingResponse(true);
     stopListening();
     
     try {
+      console.log('📝 Submitting response...');
+      const startTime = Date.now();
+      
+      // Submit response (optimized - no real-time analysis)
       await simulator.submitResponse(textResponse.trim());
+      
+      const duration = Date.now() - startTime;
+      console.log(`✅ Response submitted in ${duration}ms`);
       
       if (simulator.isInterviewComplete()) {
         endInterview();
@@ -388,6 +398,8 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
       }
     } catch (error) {
       console.error('Error submitting response:', error);
+    } finally {
+      setIsSubmittingResponse(false);
     }
   };
 
@@ -471,6 +483,21 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
               </div>
             )}
 
+            {/* Performance Optimization Alert */}
+            {isConnected && simulator.isUsingAgentic() && (
+              <div className="mb-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                <div className="flex items-center">
+                  <Zap className="w-5 h-5 text-purple-600 mr-3" />
+                  <div className="text-purple-800 text-sm">
+                    <p className="font-medium">Performance Optimized</p>
+                    <p className="text-xs text-purple-600 mt-1">
+                      Questions are pre-generated for faster responses. Comprehensive analysis happens at the end.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Loading Question Alert */}
             {isLoadingQuestion && (
               <div className="mb-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
@@ -479,7 +506,7 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
                   <div className="text-purple-800 text-sm">
                     <p className="font-medium">Agentic AI is generating your question...</p>
                     <p className="text-xs text-purple-600 mt-1">
-                      This may take up to 2 minutes for the best quality questions
+                      This may take a moment for the best quality questions
                     </p>
                   </div>
                 </div>
@@ -616,7 +643,7 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
                     onChange={(e) => setTextResponse(e.target.value)}
                     placeholder="Type your response here or use the microphone to speak..."
                     className="w-full h-32 px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors"
-                    disabled={!isInterviewActive || isLoadingQuestion}
+                    disabled={!isInterviewActive || isLoadingQuestion || isSubmittingResponse}
                   />
 
                   <div className="flex items-center justify-between">
@@ -624,7 +651,7 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
                       {speechSupported && (
                         <button
                           onClick={toggleMicrophone}
-                          disabled={!isInterviewActive || isLoadingQuestion}
+                          disabled={!isInterviewActive || isLoadingQuestion || isSubmittingResponse}
                           className={`p-3 rounded-xl transition-all ${
                             isListening
                               ? 'bg-red-100 text-red-600 animate-pulse'
@@ -641,14 +668,25 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
                           Recording...
                         </div>
                       )}
+
+                      {isSubmittingResponse && (
+                        <div className="flex items-center text-sm text-blue-600">
+                          <Loader className="w-4 h-4 animate-spin mr-2" />
+                          Processing response...
+                        </div>
+                      )}
                     </div>
 
                     <button
                       onClick={submitResponse}
-                      disabled={!isInterviewActive || !textResponse.trim() || isLoadingQuestion}
+                      disabled={!isInterviewActive || !textResponse.trim() || isLoadingQuestion || isSubmittingResponse}
                       className="inline-flex items-center px-6 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >
-                      <Send className="w-4 h-4 mr-2" />
+                      {isSubmittingResponse ? (
+                        <Loader className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4 mr-2" />
+                      )}
                       Submit Response
                     </button>
                   </div>
@@ -674,6 +712,27 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
               <div className="mt-4 text-xs text-gray-500">
                 Your notes will be saved and available in the analytics section.
               </div>
+
+              {/* Performance Stats */}
+              {simulator.isUsingAgentic() && (
+                <div className="mt-6 p-4 bg-purple-50 rounded-xl">
+                  <h4 className="font-medium text-purple-900 mb-2">Performance Mode</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-purple-700">AI Mode:</span>
+                      <span className="text-purple-900 font-medium">Agentic</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-purple-700">Optimization:</span>
+                      <span className="text-purple-900 font-medium">Enabled</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-purple-700">Pre-generation:</span>
+                      <span className="text-purple-900 font-medium">Active</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

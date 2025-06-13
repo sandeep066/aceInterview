@@ -8,6 +8,7 @@ export class AIInterviewSimulator {
   private responses: InterviewResponse[];
   private generatedQuestions: string[];
   private isUsingLLM: boolean;
+  private nextQuestionCache: string | null = null;
 
   constructor(config: InterviewConfig) {
     this.config = config;
@@ -16,6 +17,7 @@ export class AIInterviewSimulator {
     this.responses = [];
     this.generatedQuestions = [];
     this.isUsingLLM = true;
+    this.nextQuestionCache = null;
   }
 
   async getNextQuestion(): Promise<string | null> {
@@ -28,6 +30,15 @@ export class AIInterviewSimulator {
 
       if (this.currentQuestionIndex >= maxQuestions) {
         return null;
+      }
+
+      // Use cached question if available
+      if (this.nextQuestionCache) {
+        console.log('✅ Using cached next question');
+        const cachedQuestion = this.nextQuestionCache;
+        this.nextQuestionCache = null;
+        this.generatedQuestions.push(cachedQuestion);
+        return cachedQuestion;
       }
 
       if (this.isUsingLLM) {
@@ -45,6 +56,10 @@ export class AIInterviewSimulator {
         console.log(`✅ Agentic question received in ${duration}ms`);
 
         this.generatedQuestions.push(question);
+        
+        // Pre-generate next question in background if not the last question
+        this.preGenerateNextQuestion();
+        
         return question;
       } else {
         // Fallback to predefined questions
@@ -56,6 +71,39 @@ export class AIInterviewSimulator {
       // Fallback to predefined questions if LLM fails
       this.isUsingLLM = false;
       return this.getFallbackQuestion();
+    }
+  }
+
+  /**
+   * Pre-generate the next question in the background for faster response
+   */
+  private async preGenerateNextQuestion(): Promise<void> {
+    try {
+      const maxQuestions = Math.min(
+        Math.max(3, Math.floor(this.config.duration / 15)),
+        8
+      );
+
+      // Only pre-generate if there will be a next question
+      if (this.currentQuestionIndex + 1 < maxQuestions && this.isUsingLLM) {
+        console.log('🔄 Pre-generating next question in background...');
+        
+        // Don't await this - let it run in background
+        APIService.generateQuestion({
+          config: this.config,
+          previousQuestions: this.generatedQuestions,
+          previousResponses: this.responses,
+          questionNumber: this.currentQuestionIndex + 2
+        }).then(question => {
+          this.nextQuestionCache = question;
+          console.log('✅ Next question pre-generated and cached');
+        }).catch(error => {
+          console.error('❌ Pre-generation failed:', error);
+          // Don't set cache on failure
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error in pre-generation:', error);
     }
   }
 
@@ -125,18 +173,9 @@ export class AIInterviewSimulator {
     this.responses.push(responseData);
     this.currentQuestionIndex++;
 
-    // Optionally analyze the response in real-time
-    if (this.isUsingLLM) {
-      try {
-        await APIService.analyzeResponse({
-          question: currentQuestion,
-          response,
-          config: this.config
-        });
-      } catch (error) {
-        console.error('Error analyzing response:', error);
-      }
-    }
+    // Skip real-time response analysis to improve performance
+    // Analysis will be done comprehensively at the end
+    console.log('📝 Response submitted, skipping real-time analysis for better performance');
   }
 
   async generateFollowUp(previousResponse: string): Promise<string | null> {
@@ -179,10 +218,18 @@ export class AIInterviewSimulator {
   async generateAnalytics(): Promise<AnalyticsData> {
     if (this.isUsingLLM && this.responses.length > 0) {
       try {
-        return await APIService.generateAnalytics({
+        console.log('🧠 Starting comprehensive agentic analytics generation...');
+        const startTime = Date.now();
+        
+        const analytics = await APIService.generateAnalytics({
           responses: this.responses,
           config: this.config
         });
+        
+        const duration = Date.now() - startTime;
+        console.log(`✅ Agentic analytics completed in ${duration}ms`);
+        
+        return analytics;
       } catch (error) {
         console.error('Error generating LLM analytics:', error);
       }
@@ -216,7 +263,12 @@ export class AIInterviewSimulator {
       strengths,
       improvements,
       responseAnalysis,
-      questionReviews
+      questionReviews,
+      metadata: {
+        generatedAt: new Date().toISOString(),
+        analysisMethod: 'fallback',
+        totalResponses: this.responses.length
+      }
     };
   }
 
@@ -339,5 +391,17 @@ export class AIInterviewSimulator {
   forceFallbackMode(): void {
     console.log('🔄 Forcing fallback mode');
     this.isUsingLLM = false;
+    this.nextQuestionCache = null; // Clear any cached questions
+  }
+
+  // Add method to get performance stats
+  getPerformanceStats() {
+    return {
+      isUsingLLM: this.isUsingLLM,
+      questionsGenerated: this.generatedQuestions.length,
+      responsesSubmitted: this.responses.length,
+      hasCachedQuestion: !!this.nextQuestionCache,
+      currentQuestionIndex: this.currentQuestionIndex
+    };
   }
 }
