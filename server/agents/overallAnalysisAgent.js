@@ -88,45 +88,93 @@ Focus on:
 - Specific, actionable next steps for improvement`;
   }
 
+  /**
+   * Clean LLM response to remove markdown formatting
+   */
+  cleanLLMResponse(response) {
+    let cleaned = response.trim();
+    
+    console.log(`[OverallAnalysisAgent] Original response length: ${cleaned.length}`);
+    console.log(`[OverallAnalysisAgent] Response starts with: "${cleaned.substring(0, 50)}..."`);
+    
+    // Remove markdown code block delimiters
+    if (cleaned.startsWith('```json')) {
+      cleaned = cleaned.substring(7);
+      console.log('[OverallAnalysisAgent] Removed leading ```json delimiter');
+    } else if (cleaned.startsWith('```')) {
+      cleaned = cleaned.substring(3);
+      console.log('[OverallAnalysisAgent] Removed leading ``` delimiter');
+    }
+    
+    if (cleaned.endsWith('```')) {
+      cleaned = cleaned.substring(0, cleaned.length - 3);
+      console.log('[OverallAnalysisAgent] Removed trailing ``` delimiter');
+    }
+    
+    // Remove any remaining backticks at the start or end
+    cleaned = cleaned.replace(/^`+|`+$/g, '');
+    
+    // Trim whitespace
+    cleaned = cleaned.trim();
+    
+    console.log(`[OverallAnalysisAgent] Cleaned response length: ${cleaned.length}`);
+    console.log(`[OverallAnalysisAgent] Cleaned response starts with: "${cleaned.substring(0, 50)}..."`);
+    
+    return cleaned;
+  }
+
+  /**
+   * Extract JSON from text using multiple strategies
+   */
+  extractJSONFromText(text) {
+    // Strategy 1: Look for complete JSON object
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return jsonMatch[0];
+    }
+    
+    // Strategy 2: Look for JSON between specific markers
+    const markerMatch = text.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+    if (markerMatch) {
+      return markerMatch[1];
+    }
+    
+    // Strategy 3: Look for JSON after "json" keyword
+    const afterJsonMatch = text.match(/json\s*(\{[\s\S]*\})/i);
+    if (afterJsonMatch) {
+      return afterJsonMatch[1];
+    }
+    
+    return null;
+  }
+
   processResponse(response, input, context) {
     try {
-      // Clean the response to remove markdown code block delimiters
-      let cleanedResponse = response.trim();
+      // Step 1: Clean the response
+      let cleanedResponse = this.cleanLLMResponse(response);
       
-      console.log(`[OverallAnalysisAgent] Original response length: ${cleanedResponse.length}`);
-      console.log(`[OverallAnalysisAgent] Response starts with: "${cleanedResponse.substring(0, 50)}..."`);
-      
-      // Remove leading ```json or ``` and trailing ```
-      let cleaningApplied = false;
-      
-      if (cleanedResponse.startsWith('```json')) {
-        cleanedResponse = cleanedResponse.substring(7);
-        cleaningApplied = true;
-        console.log('[OverallAnalysisAgent] Removed leading ```json delimiter');
-      } else if (cleanedResponse.startsWith('```')) {
-        cleanedResponse = cleanedResponse.substring(3);
-        cleaningApplied = true;
-        console.log('[OverallAnalysisAgent] Removed leading ``` delimiter');
+      // Step 2: Try to parse the cleaned response
+      let result;
+      try {
+        result = JSON.parse(cleanedResponse);
+        console.log('[OverallAnalysisAgent] Successfully parsed cleaned response');
+      } catch (parseError) {
+        console.log('[OverallAnalysisAgent] Failed to parse cleaned response, attempting JSON extraction');
+        
+        // Step 3: Try to extract JSON from the original response
+        const extractedJSON = this.extractJSONFromText(response);
+        if (extractedJSON) {
+          console.log(`[OverallAnalysisAgent] Extracted JSON, length: ${extractedJSON.length}`);
+          result = JSON.parse(extractedJSON);
+          console.log('[OverallAnalysisAgent] Successfully parsed extracted JSON');
+        } else {
+          throw new Error('No valid JSON found in response');
+        }
       }
       
-      if (cleanedResponse.endsWith('```')) {
-        cleanedResponse = cleanedResponse.substring(0, cleanedResponse.length - 3);
-        cleaningApplied = true;
-        console.log('[OverallAnalysisAgent] Removed trailing ``` delimiter');
-      }
-      
-      // Trim any remaining whitespace
-      cleanedResponse = cleanedResponse.trim();
-      
-      console.log(`[OverallAnalysisAgent] Cleaned response length: ${cleanedResponse.length}`);
-      console.log(`[OverallAnalysisAgent] Cleaning applied: ${cleaningApplied}`);
-      console.log(`[OverallAnalysisAgent] Cleaned response starts with: "${cleanedResponse.substring(0, 50)}..."`);
-      
-      const result = JSON.parse(cleanedResponse);
-      
-      // Validate response structure
+      // Step 4: Validate and normalize the result
       if (!result.overallScore || !result.responseAnalysis) {
-        throw new Error('Invalid overall analysis structure');
+        throw new Error('Invalid overall analysis structure - missing required fields');
       }
       
       // Ensure scores are within valid range
@@ -135,24 +183,35 @@ Focus on:
       
       for (const field of scoreFields) {
         if (typeof scores[field] !== 'number' || scores[field] < 0 || scores[field] > 100) {
+          console.log(`[OverallAnalysisAgent] Normalizing invalid score for ${field}: ${scores[field]} -> 70`);
           scores[field] = 70; // Default to neutral score
         }
       }
       
       // Validate overall score
       if (typeof result.overallScore !== 'number' || result.overallScore < 0 || result.overallScore > 100) {
-        result.overallScore = Math.round(Object.values(scores).reduce((sum, score) => sum + score, 0) / scoreFields.length);
+        const calculatedScore = Math.round(Object.values(scores).reduce((sum, score) => sum + score, 0) / scoreFields.length);
+        console.log(`[OverallAnalysisAgent] Normalizing invalid overall score: ${result.overallScore} -> ${calculatedScore}`);
+        result.overallScore = calculatedScore;
       }
       
-      // Determine performance level if not provided
-      if (!result.performanceLevel) {
+      // Determine performance level if not provided or invalid
+      const validLevels = ['excellent', 'good', 'fair', 'needs_improvement'];
+      if (!result.performanceLevel || !validLevels.includes(result.performanceLevel)) {
         if (result.overallScore >= 85) result.performanceLevel = 'excellent';
         else if (result.overallScore >= 70) result.performanceLevel = 'good';
         else if (result.overallScore >= 60) result.performanceLevel = 'fair';
         else result.performanceLevel = 'needs_improvement';
+        console.log(`[OverallAnalysisAgent] Set performance level to: ${result.performanceLevel}`);
       }
       
-      console.log(`[OverallAnalysisAgent] Successfully parsed analysis with overall score: ${result.overallScore}`);
+      // Ensure required arrays exist
+      if (!Array.isArray(result.strengths)) result.strengths = [];
+      if (!Array.isArray(result.improvements)) result.improvements = [];
+      if (!Array.isArray(result.recommendations)) result.recommendations = [];
+      if (!Array.isArray(result.nextSteps)) result.nextSteps = [];
+      
+      console.log(`[OverallAnalysisAgent] Successfully processed analysis with overall score: ${result.overallScore}`);
       
       return {
         success: true,
@@ -161,65 +220,13 @@ Focus on:
           analyzedAt: new Date().toISOString(),
           totalResponses: input.responseAnalyses.length,
           averageResponseLength: input.responseAnalyses.reduce((sum, r) => sum + r.response.length, 0) / input.responseAnalyses.length,
-          cleaningApplied
+          processingMethod: 'cleaned_and_validated'
         }
       };
-    } catch (error) {
-      console.error('[OverallAnalysisAgent] Failed to parse overall analysis:', error);
-      console.error('[OverallAnalysisAgent] Raw response preview:', response.substring(0, 300) + '...');
       
-      // Try to extract JSON from the response if it's embedded in text
-      try {
-        console.log('[OverallAnalysisAgent] Attempting to extract JSON from response...');
-        
-        // Look for JSON object patterns in the response
-        const jsonMatch = response.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const extractedJson = jsonMatch[0];
-          console.log(`[OverallAnalysisAgent] Found potential JSON, length: ${extractedJson.length}`);
-          
-          const result = JSON.parse(extractedJson);
-          
-          // Apply same validation as above
-          if (result.overallScore && result.responseAnalysis) {
-            console.log('[OverallAnalysisAgent] Successfully extracted and parsed JSON from response');
-            
-            // Ensure scores are within valid range
-            const scores = result.responseAnalysis;
-            const scoreFields = ['clarity', 'structure', 'technical', 'communication', 'confidence'];
-            
-            for (const field of scoreFields) {
-              if (typeof scores[field] !== 'number' || scores[field] < 0 || scores[field] > 100) {
-                scores[field] = 70;
-              }
-            }
-            
-            if (typeof result.overallScore !== 'number' || result.overallScore < 0 || result.overallScore > 100) {
-              result.overallScore = Math.round(Object.values(scores).reduce((sum, score) => sum + score, 0) / scoreFields.length);
-            }
-            
-            if (!result.performanceLevel) {
-              if (result.overallScore >= 85) result.performanceLevel = 'excellent';
-              else if (result.overallScore >= 70) result.performanceLevel = 'good';
-              else if (result.overallScore >= 60) result.performanceLevel = 'fair';
-              else result.performanceLevel = 'needs_improvement';
-            }
-            
-            return {
-              success: true,
-              analysis: result,
-              metadata: {
-                analyzedAt: new Date().toISOString(),
-                totalResponses: input.responseAnalyses.length,
-                averageResponseLength: input.responseAnalyses.reduce((sum, r) => sum + r.response.length, 0) / input.responseAnalyses.length,
-                extractedFromText: true
-              }
-            };
-          }
-        }
-      } catch (extractError) {
-        console.error('[OverallAnalysisAgent] JSON extraction also failed:', extractError);
-      }
+    } catch (error) {
+      console.error('[OverallAnalysisAgent] All parsing attempts failed:', error);
+      console.error('[OverallAnalysisAgent] Raw response preview:', response.substring(0, 500) + '...');
       
       // Generate fallback analysis
       console.log('[OverallAnalysisAgent] Using fallback analysis due to parsing failure');
@@ -231,7 +238,8 @@ Focus on:
           totalResponses: input.responseAnalyses.length,
           fallback: true,
           parseError: error.message,
-          originalResponseLength: response.length
+          originalResponseLength: response.length,
+          processingMethod: 'fallback'
         }
       };
     }
