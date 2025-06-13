@@ -89,15 +89,15 @@ Focus on:
   }
 
   /**
-   * Clean LLM response to remove markdown formatting
+   * Comprehensive LLM response cleaning with multiple strategies
    */
   cleanLLMResponse(response) {
     let cleaned = response.trim();
     
     console.log(`[OverallAnalysisAgent] Original response length: ${cleaned.length}`);
-    console.log(`[OverallAnalysisAgent] Response starts with: "${cleaned.substring(0, 50)}..."`);
+    console.log(`[OverallAnalysisAgent] Response starts with: "${cleaned.substring(0, 100)}..."`);
     
-    // Remove markdown code block delimiters
+    // Strategy 1: Remove markdown code block delimiters
     if (cleaned.startsWith('```json')) {
       cleaned = cleaned.substring(7);
       console.log('[OverallAnalysisAgent] Removed leading ```json delimiter');
@@ -111,88 +111,141 @@ Focus on:
       console.log('[OverallAnalysisAgent] Removed trailing ``` delimiter');
     }
     
-    // Remove any remaining backticks at the start or end
+    // Strategy 2: Remove any remaining backticks at the start or end
     cleaned = cleaned.replace(/^`+|`+$/g, '');
     
-    // Trim whitespace
+    // Strategy 3: Remove any leading/trailing quotes that might wrap the entire JSON
+    if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || 
+        (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+      cleaned = cleaned.slice(1, -1);
+      console.log('[OverallAnalysisAgent] Removed wrapping quotes');
+    }
+    
+    // Strategy 4: Trim whitespace and newlines
     cleaned = cleaned.trim();
     
     console.log(`[OverallAnalysisAgent] Cleaned response length: ${cleaned.length}`);
-    console.log(`[OverallAnalysisAgent] Cleaned response starts with: "${cleaned.substring(0, 50)}..."`);
+    console.log(`[OverallAnalysisAgent] Cleaned response starts with: "${cleaned.substring(0, 100)}..."`);
     
     return cleaned;
   }
 
   /**
-   * Extract JSON from text using multiple strategies
+   * Extract JSON from text using multiple advanced strategies
    */
   extractJSONFromText(text) {
-    // Strategy 1: Look for complete JSON object
+    console.log('[OverallAnalysisAgent] Attempting JSON extraction with multiple strategies');
+    
+    // Strategy 1: Look for complete JSON object (most common)
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
+      console.log('[OverallAnalysisAgent] Strategy 1: Found complete JSON object');
       return jsonMatch[0];
     }
     
-    // Strategy 2: Look for JSON between specific markers
+    // Strategy 2: Look for JSON between markdown code blocks
     const markerMatch = text.match(/```json\s*(\{[\s\S]*?\})\s*```/);
     if (markerMatch) {
+      console.log('[OverallAnalysisAgent] Strategy 2: Found JSON between markdown blocks');
       return markerMatch[1];
     }
     
     // Strategy 3: Look for JSON after "json" keyword
     const afterJsonMatch = text.match(/json\s*(\{[\s\S]*\})/i);
     if (afterJsonMatch) {
+      console.log('[OverallAnalysisAgent] Strategy 3: Found JSON after "json" keyword');
       return afterJsonMatch[1];
     }
     
+    // Strategy 4: Look for JSON between any backticks
+    const backtickMatch = text.match(/```[\s\S]*?(\{[\s\S]*?\})[\s\S]*?```/);
+    if (backtickMatch) {
+      console.log('[OverallAnalysisAgent] Strategy 4: Found JSON between backticks');
+      return backtickMatch[1];
+    }
+    
+    // Strategy 5: Look for the largest JSON-like structure
+    const allBraces = text.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
+    if (allBraces && allBraces.length > 0) {
+      // Return the longest match (most likely to be complete)
+      const longest = allBraces.reduce((a, b) => a.length > b.length ? a : b);
+      console.log('[OverallAnalysisAgent] Strategy 5: Found longest JSON-like structure');
+      return longest;
+    }
+    
+    console.log('[OverallAnalysisAgent] All extraction strategies failed');
     return null;
   }
 
   processResponse(response, input, context) {
+    console.log('[OverallAnalysisAgent] Starting response processing');
+    
     try {
       // Step 1: Clean the response
       let cleanedResponse = this.cleanLLMResponse(response);
       
-      // Step 2: Try to parse the cleaned response
+      // Step 2: Try to parse the cleaned response directly
       let result;
       try {
         result = JSON.parse(cleanedResponse);
-        console.log('[OverallAnalysisAgent] Successfully parsed cleaned response');
+        console.log('[OverallAnalysisAgent] ✅ Successfully parsed cleaned response directly');
       } catch (parseError) {
-        console.log('[OverallAnalysisAgent] Failed to parse cleaned response, attempting JSON extraction');
+        console.log('[OverallAnalysisAgent] ❌ Direct parsing failed, attempting JSON extraction');
+        console.log('[OverallAnalysisAgent] Parse error:', parseError.message);
         
         // Step 3: Try to extract JSON from the original response
         const extractedJSON = this.extractJSONFromText(response);
         if (extractedJSON) {
           console.log(`[OverallAnalysisAgent] Extracted JSON, length: ${extractedJSON.length}`);
-          result = JSON.parse(extractedJSON);
-          console.log('[OverallAnalysisAgent] Successfully parsed extracted JSON');
+          try {
+            result = JSON.parse(extractedJSON);
+            console.log('[OverallAnalysisAgent] ✅ Successfully parsed extracted JSON');
+          } catch (extractParseError) {
+            console.log('[OverallAnalysisAgent] ❌ Extracted JSON also failed to parse');
+            throw new Error(`JSON extraction parse failed: ${extractParseError.message}`);
+          }
         } else {
-          throw new Error('No valid JSON found in response');
+          throw new Error('No valid JSON found in response using any extraction strategy');
         }
       }
       
       // Step 4: Validate and normalize the result
-      if (!result.overallScore || !result.responseAnalysis) {
-        throw new Error('Invalid overall analysis structure - missing required fields');
+      console.log('[OverallAnalysisAgent] Validating parsed result structure');
+      
+      if (!result || typeof result !== 'object') {
+        throw new Error('Parsed result is not a valid object');
       }
       
-      // Ensure scores are within valid range
-      const scores = result.responseAnalysis;
+      if (!result.overallScore && !result.responseAnalysis) {
+        throw new Error('Invalid overall analysis structure - missing required fields (overallScore and responseAnalysis)');
+      }
+      
+      // Ensure overallScore exists and is valid
+      if (typeof result.overallScore !== 'number' || result.overallScore < 0 || result.overallScore > 100) {
+        console.log(`[OverallAnalysisAgent] Invalid overallScore: ${result.overallScore}, calculating from response analysis`);
+        if (result.responseAnalysis && typeof result.responseAnalysis === 'object') {
+          const scores = Object.values(result.responseAnalysis).filter(score => typeof score === 'number');
+          result.overallScore = scores.length > 0 ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : 70;
+        } else {
+          result.overallScore = 70; // Default fallback
+        }
+      }
+      
+      // Ensure responseAnalysis exists and is valid
+      if (!result.responseAnalysis || typeof result.responseAnalysis !== 'object') {
+        console.log('[OverallAnalysisAgent] Missing or invalid responseAnalysis, creating default');
+        result.responseAnalysis = {};
+      }
+      
+      // Validate and normalize response analysis scores
       const scoreFields = ['clarity', 'structure', 'technical', 'communication', 'confidence'];
+      const scores = result.responseAnalysis;
       
       for (const field of scoreFields) {
         if (typeof scores[field] !== 'number' || scores[field] < 0 || scores[field] > 100) {
           console.log(`[OverallAnalysisAgent] Normalizing invalid score for ${field}: ${scores[field]} -> 70`);
           scores[field] = 70; // Default to neutral score
         }
-      }
-      
-      // Validate overall score
-      if (typeof result.overallScore !== 'number' || result.overallScore < 0 || result.overallScore > 100) {
-        const calculatedScore = Math.round(Object.values(scores).reduce((sum, score) => sum + score, 0) / scoreFields.length);
-        console.log(`[OverallAnalysisAgent] Normalizing invalid overall score: ${result.overallScore} -> ${calculatedScore}`);
-        result.overallScore = calculatedScore;
       }
       
       // Determine performance level if not provided or invalid
@@ -206,12 +259,40 @@ Focus on:
       }
       
       // Ensure required arrays exist
-      if (!Array.isArray(result.strengths)) result.strengths = [];
-      if (!Array.isArray(result.improvements)) result.improvements = [];
-      if (!Array.isArray(result.recommendations)) result.recommendations = [];
-      if (!Array.isArray(result.nextSteps)) result.nextSteps = [];
+      if (!Array.isArray(result.strengths)) {
+        console.log('[OverallAnalysisAgent] Creating default strengths array');
+        result.strengths = ['Shows understanding of core concepts'];
+      }
+      if (!Array.isArray(result.improvements)) {
+        console.log('[OverallAnalysisAgent] Creating default improvements array');
+        result.improvements = ['Provide more specific examples'];
+      }
+      if (!Array.isArray(result.recommendations)) {
+        console.log('[OverallAnalysisAgent] Creating default recommendations array');
+        result.recommendations = ['Practice structured responses'];
+      }
+      if (!Array.isArray(result.nextSteps)) {
+        console.log('[OverallAnalysisAgent] Creating default nextSteps array');
+        result.nextSteps = ['Continue practicing interview scenarios'];
+      }
       
-      console.log(`[OverallAnalysisAgent] Successfully processed analysis with overall score: ${result.overallScore}`);
+      // Ensure trends object exists
+      if (!result.trends || typeof result.trends !== 'object') {
+        console.log('[OverallAnalysisAgent] Creating default trends object');
+        result.trends = {
+          improvement: 'consistent',
+          consistency: 'medium',
+          adaptability: 'medium'
+        };
+      }
+      
+      // Ensure executiveSummary exists
+      if (!result.executiveSummary || typeof result.executiveSummary !== 'string') {
+        console.log('[OverallAnalysisAgent] Creating default executive summary');
+        result.executiveSummary = `The candidate demonstrated ${result.performanceLevel} performance with an overall score of ${result.overallScore}%. They show understanding of the core concepts but could benefit from continued practice and improvement.`;
+      }
+      
+      console.log(`[OverallAnalysisAgent] ✅ Successfully processed analysis with overall score: ${result.overallScore}`);
       
       return {
         success: true,
@@ -220,16 +301,19 @@ Focus on:
           analyzedAt: new Date().toISOString(),
           totalResponses: input.responseAnalyses.length,
           averageResponseLength: input.responseAnalyses.reduce((sum, r) => sum + r.response.length, 0) / input.responseAnalyses.length,
-          processingMethod: 'cleaned_and_validated'
+          processingMethod: 'cleaned_and_validated',
+          validationApplied: true
         }
       };
       
     } catch (error) {
-      console.error('[OverallAnalysisAgent] All parsing attempts failed:', error);
-      console.error('[OverallAnalysisAgent] Raw response preview:', response.substring(0, 500) + '...');
+      console.error('[OverallAnalysisAgent] ❌ All parsing attempts failed:', error);
+      console.error('[OverallAnalysisAgent] Error details:', error.message);
+      console.error('[OverallAnalysisAgent] Raw response preview (first 500 chars):', response.substring(0, 500));
+      console.error('[OverallAnalysisAgent] Raw response preview (last 200 chars):', response.substring(Math.max(0, response.length - 200)));
       
       // Generate fallback analysis
-      console.log('[OverallAnalysisAgent] Using fallback analysis due to parsing failure');
+      console.log('[OverallAnalysisAgent] 🔄 Using fallback analysis due to parsing failure');
       return {
         success: false,
         analysis: this.generateFallbackAnalysis(input),
@@ -239,7 +323,8 @@ Focus on:
           fallback: true,
           parseError: error.message,
           originalResponseLength: response.length,
-          processingMethod: 'fallback'
+          processingMethod: 'fallback',
+          rawResponsePreview: response.substring(0, 200)
         }
       };
     }
@@ -248,7 +333,7 @@ Focus on:
   generateFallbackAnalysis(input) {
     const { responseAnalyses, config } = input;
     
-    console.log('[OverallAnalysisAgent] Generating fallback analysis');
+    console.log('[OverallAnalysisAgent] Generating comprehensive fallback analysis');
     
     // Calculate averages from individual analyses
     const avgScores = {
@@ -260,6 +345,8 @@ Focus on:
     };
     
     let totalScore = 0;
+    const allStrengths = [];
+    const allImprovements = [];
     
     responseAnalyses.forEach(analysis => {
       const scores = analysis.analysis.responseAnalysis;
@@ -267,6 +354,14 @@ Focus on:
         avgScores[key] += scores[key] || 70;
       });
       totalScore += analysis.analysis.score || 70;
+      
+      // Collect strengths and improvements
+      if (analysis.analysis.strengths) {
+        allStrengths.push(...analysis.analysis.strengths);
+      }
+      if (analysis.analysis.improvements) {
+        allImprovements.push(...analysis.analysis.improvements);
+      }
     });
     
     Object.keys(avgScores).forEach(key => {
@@ -280,13 +375,25 @@ Focus on:
     else if (overallScore >= 70) performanceLevel = 'good';
     else if (overallScore < 60) performanceLevel = 'needs_improvement';
     
+    // Deduplicate and select top strengths/improvements
+    const uniqueStrengths = [...new Set(allStrengths)].slice(0, 3);
+    const uniqueImprovements = [...new Set(allImprovements)].slice(0, 3);
+    
     console.log(`[OverallAnalysisAgent] Fallback analysis generated with overall score: ${overallScore}`);
     
     return {
       overallScore,
       performanceLevel,
-      strengths: ["Shows understanding of core concepts", "Demonstrates relevant experience"],
-      improvements: ["Provide more specific examples", "Structure responses more clearly"],
+      strengths: uniqueStrengths.length > 0 ? uniqueStrengths : [
+        "Shows understanding of core concepts", 
+        "Demonstrates relevant experience",
+        "Communicates ideas clearly"
+      ],
+      improvements: uniqueImprovements.length > 0 ? uniqueImprovements : [
+        "Provide more specific examples", 
+        "Structure responses more clearly",
+        "Practice confident delivery"
+      ],
       responseAnalysis: avgScores,
       trends: {
         improvement: "consistent",
@@ -296,13 +403,15 @@ Focus on:
       recommendations: [
         "Practice structuring responses using frameworks like STAR method",
         "Prepare specific examples for common question types",
-        "Work on confident delivery and clear communication"
+        "Work on confident delivery and clear communication",
+        `Focus on improving ${config.topic} knowledge depth`
       ],
-      executiveSummary: `The candidate demonstrated ${performanceLevel} performance with an overall score of ${overallScore}%. They show solid understanding of ${config.topic} concepts but could benefit from more structured responses and specific examples.`,
+      executiveSummary: `The candidate demonstrated ${performanceLevel} performance with an overall score of ${overallScore}%. They show solid understanding of ${config.topic} concepts but could benefit from more structured responses and specific examples. The analysis shows ${responseAnalyses.length} responses with consistent performance across different question types.`,
       nextSteps: [
         "Practice mock interviews focusing on response structure",
         "Prepare a portfolio of specific examples for different scenarios",
-        "Work on confident delivery and clear articulation"
+        "Work on confident delivery and clear articulation",
+        `Deepen knowledge in ${config.topic} through additional study and practice`
       ]
     };
   }
