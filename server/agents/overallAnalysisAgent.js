@@ -15,6 +15,8 @@ Your role is to:
 4. Provide strategic recommendations for improvement
 5. Generate executive summary of interview performance
 
+CRITICAL: Always respond with ONLY a valid JSON object. Do NOT use markdown code blocks, backticks, or any other formatting. Return raw JSON only.
+
 Always respond with a JSON object containing:
 {
   "overallScore": number (0-100),
@@ -85,7 +87,9 @@ Focus on:
 - Improvement or decline trends during the interview
 - Adaptability to different question types
 - Overall readiness for the target role
-- Specific, actionable next steps for improvement`;
+- Specific, actionable next steps for improvement
+
+Remember: Return ONLY the JSON object without any markdown formatting or code blocks.`;
   }
 
   /**

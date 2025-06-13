@@ -60,14 +60,17 @@ export class LLMQuestionGenerator {
   async makeAPICall(messages, systemPrompt = '') {
     console.log(`[LLM] Making API call using ${this.provider.toUpperCase()}`);
     
+    // Add explicit instruction to avoid markdown formatting
+    const enhancedSystemPrompt = systemPrompt + '\n\nIMPORTANT: Always respond with ONLY valid JSON. Do NOT use markdown code blocks, backticks (```), or any other formatting. Return raw JSON only.';
+    
     switch (this.provider) {
       case 'gemini':
-        return await this.makeGeminiCall(messages, systemPrompt);
+        return await this.makeGeminiCall(messages, enhancedSystemPrompt);
       case 'anthropic':
-        return await this.makeAnthropicCall(messages, systemPrompt);
+        return await this.makeAnthropicCall(messages, enhancedSystemPrompt);
       case 'openai':
       default:
-        return await this.makeOpenAICall(messages, systemPrompt);
+        return await this.makeOpenAICall(messages, enhancedSystemPrompt);
     }
   }
 
@@ -229,7 +232,7 @@ Generate ONE interview question that is:
 - Realistic for the interview style
 - Engaging and thought-provoking
 
-Return ONLY the question text, no additional formatting or explanation.`;
+CRITICAL: Return ONLY the question text without any markdown formatting, code blocks, or additional text.`;
 
     const messages = [
       {
@@ -287,7 +290,7 @@ Generate a natural follow-up question that:
 4. Feels conversational and natural
 5. Is appropriate for the interview style
 
-Return ONLY the follow-up question, no additional text.`;
+CRITICAL: Return ONLY the follow-up question text without any markdown formatting, code blocks, or additional text.`;
 
     const messages = [
       {
@@ -339,6 +342,8 @@ Analyze the response and provide:
 2. Brief feedback (2-3 sentences)
 3. Key strengths identified
 4. Areas for improvement
+
+CRITICAL: Return ONLY a valid JSON object without any markdown formatting or code blocks.
 
 Return a JSON object with this structure:
 {
@@ -424,6 +429,8 @@ Interview Context:
 
 Interview Q&A:
 ${responses.map((r, i) => `Q${i+1}: ${r.question}\nA${i+1}: ${r.response}\n`).join('\n')}
+
+CRITICAL: Return ONLY a valid JSON object without any markdown formatting or code blocks.
 
 Provide comprehensive analytics in this JSON format:
 {

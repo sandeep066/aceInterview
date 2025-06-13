@@ -15,6 +15,8 @@ Your role is to:
 4. Consider the experience level and interview style
 5. Provide a structured analysis that guides question generation
 
+CRITICAL: Always respond with ONLY a valid JSON object. Do NOT use markdown code blocks, backticks, or any other formatting. Return raw JSON only.
+
 Always respond with a JSON object containing:
 {
   "mainConcepts": ["concept1", "concept2", ...],
@@ -50,7 +52,9 @@ Please provide a comprehensive analysis that will guide the generation of highly
 5. Question categories that make sense
 6. Keywords that indicate relevance
 
-Ensure the analysis is specific to the topic and not generic.`;
+Ensure the analysis is specific to the topic and not generic.
+
+Remember: Return ONLY the JSON object without any markdown formatting or code blocks.`;
   }
 
   processResponse(response, input, context) {

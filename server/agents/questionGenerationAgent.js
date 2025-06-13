@@ -15,6 +15,8 @@ Your role is to:
 4. Create engaging, realistic interview questions
 5. Avoid generic or overly broad questions
 
+CRITICAL: Always respond with ONLY a valid JSON object. Do NOT use markdown code blocks, backticks, or any other formatting. Return raw JSON only.
+
 Always respond with a JSON object containing:
 {
   "question": "The specific interview question text",
@@ -73,7 +75,9 @@ The question should be:
 - Realistic for a ${config.style} interview
 - Clear and actionable
 
-Generate ONE high-quality question that meets all these criteria.`;
+Generate ONE high-quality question that meets all these criteria.
+
+Remember: Return ONLY the JSON object without any markdown formatting or code blocks.`;
   }
 
   processResponse(response, input, context) {

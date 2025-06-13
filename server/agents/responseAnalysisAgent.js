@@ -15,6 +15,8 @@ Your role is to:
 4. Identify strengths and areas for improvement
 5. Provide specific, actionable feedback
 
+CRITICAL: Always respond with ONLY a valid JSON object. Do NOT use markdown code blocks, backticks, or any other formatting. Return raw JSON only.
+
 Always respond with a JSON object containing:
 {
   "responseAnalysis": {
@@ -62,7 +64,9 @@ ANALYSIS REQUIREMENTS:
 5. Confidence: How confident and decisive does the candidate sound?
 6. Relevance: How well does the response address the question?
 
-Provide specific examples from the response to support your analysis. Focus on actionable feedback that will help the candidate improve.`;
+Provide specific examples from the response to support your analysis. Focus on actionable feedback that will help the candidate improve.
+
+Remember: Return ONLY the JSON object without any markdown formatting or code blocks.`;
   }
 
   processResponse(response, input, context) {
