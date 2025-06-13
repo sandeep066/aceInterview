@@ -90,7 +90,26 @@ Focus on:
 
   processResponse(response, input, context) {
     try {
-      const result = JSON.parse(response);
+      // Clean the response to remove markdown code block delimiters
+      let cleanedResponse = response.trim();
+      
+      // Remove leading ```json or ``` and trailing ```
+      if (cleanedResponse.startsWith('```json')) {
+        cleanedResponse = cleanedResponse.substring(7);
+      } else if (cleanedResponse.startsWith('```')) {
+        cleanedResponse = cleanedResponse.substring(3);
+      }
+      
+      if (cleanedResponse.endsWith('```')) {
+        cleanedResponse = cleanedResponse.substring(0, cleanedResponse.length - 3);
+      }
+      
+      // Trim any remaining whitespace
+      cleanedResponse = cleanedResponse.trim();
+      
+      console.log(`[OverallAnalysisAgent] Cleaned response length: ${cleanedResponse.length}`);
+      
+      const result = JSON.parse(cleanedResponse);
       
       // Validate response structure
       if (!result.overallScore || !result.responseAnalysis) {
@@ -120,6 +139,8 @@ Focus on:
         else result.performanceLevel = 'needs_improvement';
       }
       
+      console.log(`[OverallAnalysisAgent] Successfully parsed analysis with overall score: ${result.overallScore}`);
+      
       return {
         success: true,
         analysis: result,
@@ -131,6 +152,7 @@ Focus on:
       };
     } catch (error) {
       console.error('Failed to parse overall analysis:', error);
+      console.error('Raw response preview:', response.substring(0, 200) + '...');
       
       // Generate fallback analysis
       return {
@@ -139,7 +161,8 @@ Focus on:
         metadata: {
           analyzedAt: new Date().toISOString(),
           totalResponses: input.responseAnalyses.length,
-          fallback: true
+          fallback: true,
+          parseError: error.message
         }
       };
     }
