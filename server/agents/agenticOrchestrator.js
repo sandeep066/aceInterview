@@ -1,7 +1,6 @@
 import { TopicAnalysisAgent } from './topicAnalysisAgent.js';
 import { QuestionPlanningAgent } from './questionPlanningAgent.js';
 import { QuestionGenerationAgent } from './questionGenerationAgent.js';
-import { ValidationAgent } from './validationAgent.js';
 
 /**
  * Agentic Orchestrator
@@ -11,16 +10,15 @@ export class AgenticOrchestrator {
   constructor(llmService) {
     this.llmService = llmService;
     
-    // Initialize agents
+    // Initialize agents (removed ValidationAgent)
     this.topicAnalysisAgent = new TopicAnalysisAgent(llmService);
     this.questionPlanningAgent = new QuestionPlanningAgent(llmService);
     this.questionGenerationAgent = new QuestionGenerationAgent(llmService);
-    this.validationAgent = new ValidationAgent(llmService);
     
     // Session memory for maintaining context
     this.sessionMemory = new Map();
     
-    console.log('Agentic Orchestrator initialized with all agents');
+    console.log('Agentic Orchestrator initialized without validation agent for faster processing');
   }
 
   /**
@@ -44,12 +42,11 @@ export class AgenticOrchestrator {
         config
       });
       
-      // Step 3: Question Generation with validation loop
-      const finalQuestion = await this.generateAndValidateQuestion({
+      // Step 3: Question Generation (removed validation step)
+      const finalQuestion = await this.generateQuestionDirect({
         questionSpec: questionPlan.plan.nextQuestionSpec,
         topicAnalysis,
-        config,
-        maxAttempts: 3
+        config
       });
       
       // Store in session memory
@@ -112,101 +109,48 @@ export class AgenticOrchestrator {
   }
 
   /**
-   * Generate and validate question with retry logic
+   * Generate question directly without validation (for speed)
    */
-  async generateAndValidateQuestion({ questionSpec, topicAnalysis, config, maxAttempts = 3 }) {
-    let attempts = 0;
-    let lastError = null;
+  async generateQuestionDirect({ questionSpec, topicAnalysis, config }) {
+    console.log('[Orchestrator] Generating question directly (no validation)');
     
-    while (attempts < maxAttempts) {
-      attempts++;
+    try {
+      const generationResult = await this.questionGenerationAgent.execute({
+        questionSpec,
+        topicAnalysis,
+        config
+      });
       
-      try {
-        console.log(`[Orchestrator] Question generation attempt ${attempts}`);
-        
-        // Generate question
-        const generationResult = await this.questionGenerationAgent.execute({
-          questionSpec,
-          topicAnalysis,
-          config
-        });
-        
-        if (!generationResult.success) {
-          throw new Error('Question generation failed');
-        }
-        
-        // Validate question
-        const validationResult = await this.validationAgent.execute({
-          question: generationResult.question,
-          questionSpec,
-          topicAnalysis,
-          config
-        });
-        
-        // Check validation decision
-        if (validationResult.decision === 'approve' || validationResult.validation.overallScore >= 70) {
-          console.log(`[Orchestrator] Question approved with score ${validationResult.validation.overallScore}`);
-          
-          return {
-            question: generationResult.question,
-            metadata: {
-              ...generationResult.metadata,
-              validation: validationResult.validation,
-              attempts,
-              approved: true
-            }
-          };
-        }
-        
-        // If rejected, log issues and try again
-        console.log(`[Orchestrator] Question rejected (score: ${validationResult.validation.overallScore})`);
-        console.log('Issues:', validationResult.issues);
-        console.log('Suggestions:', validationResult.suggestions);
-        
-        // Modify question spec based on suggestions for next attempt
-        if (attempts < maxAttempts) {
-          questionSpec = this.refineQuestionSpec(questionSpec, validationResult);
-        }
-        
-      } catch (error) {
-        console.error(`[Orchestrator] Attempt ${attempts} failed:`, error);
-        lastError = error;
+      if (!generationResult.success) {
+        throw new Error('Question generation failed');
       }
+      
+      console.log('[Orchestrator] Question generated successfully without validation');
+      
+      return {
+        question: generationResult.question,
+        metadata: {
+          ...generationResult.metadata,
+          validationSkipped: true,
+          fastGeneration: true,
+          generatedAt: new Date().toISOString()
+        }
+      };
+      
+    } catch (error) {
+      console.error('[Orchestrator] Direct generation failed:', error);
+      
+      return {
+        question: this.generateFallbackQuestion(config, 1),
+        metadata: {
+          fallback: true,
+          validationSkipped: true,
+          fastGeneration: true,
+          error: error.message,
+          generatedAt: new Date().toISOString()
+        }
+      };
     }
-    
-    // If all attempts failed, return the last generated question or fallback
-    console.warn(`[Orchestrator] All ${maxAttempts} attempts failed, using fallback`);
-    
-    return {
-      question: this.generateFallbackQuestion(config, 1),
-      metadata: {
-        fallback: true,
-        attempts,
-        lastError: lastError?.message,
-        approved: false
-      }
-    };
-  }
-
-  /**
-   * Refine question specification based on validation feedback
-   */
-  refineQuestionSpec(questionSpec, validationResult) {
-    const refined = { ...questionSpec };
-    
-    // Adjust based on validation issues
-    if (validationResult.issues.includes('Low topic relevance')) {
-      // Add more specific concepts
-      if (validationResult.suggestions.length > 0) {
-        refined.focusArea = validationResult.suggestions[0];
-      }
-    }
-    
-    if (validationResult.issues.includes('Question may be too brief')) {
-      refined.questionType = 'scenario'; // Encourage more detailed questions
-    }
-    
-    return refined;
   }
 
   /**
@@ -273,7 +217,8 @@ export class AgenticOrchestrator {
     return {
       activeSessions: new Set(Array.from(this.sessionMemory.keys()).map(key => key.split('_')[0])).size,
       totalCachedItems: this.sessionMemory.size,
-      memoryUsage: JSON.stringify(Array.from(this.sessionMemory.entries())).length
+      memoryUsage: JSON.stringify(Array.from(this.sessionMemory.entries())).length,
+      validationEnabled: false // Validation is now disabled
     };
   }
 }
