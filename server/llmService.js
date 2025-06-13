@@ -158,7 +158,7 @@ export class LLMQuestionGenerator {
       : messages;
     
     const requestBody = {
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4.1-nano',
       messages: allMessages,
       max_tokens: 1000,
       temperature: 0.7
