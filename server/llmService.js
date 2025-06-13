@@ -3,6 +3,20 @@ export class LLMQuestionGenerator {
     this.apiKey = process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY;
     this.provider = process.env.LLM_PROVIDER || 'openai'; // 'openai' or 'anthropic'
     this.baseURL = this.getBaseURL();
+    
+    // Initialize agentic orchestrator
+    this.initializeAgenticFramework();
+  }
+
+  async initializeAgenticFramework() {
+    try {
+      const { AgenticOrchestrator } = await import('./agents/agenticOrchestrator.js');
+      this.agenticOrchestrator = new AgenticOrchestrator(this);
+      console.log('✅ Agentic framework initialized successfully');
+    } catch (error) {
+      console.error('❌ Failed to initialize agentic framework:', error);
+      this.agenticOrchestrator = null;
+    }
   }
 
   getBaseURL() {
@@ -70,6 +84,30 @@ export class LLMQuestionGenerator {
   }
 
   async generateQuestion({ config, previousQuestions, previousResponses, questionNumber }) {
+    // Try agentic approach first
+    if (this.agenticOrchestrator) {
+      try {
+        console.log('🤖 Using agentic framework for question generation');
+        const question = await this.agenticOrchestrator.generateQuestion({
+          config,
+          previousQuestions,
+          previousResponses,
+          questionNumber
+        });
+        
+        console.log('✅ Agentic question generated successfully');
+        return question;
+      } catch (error) {
+        console.error('❌ Agentic generation failed, falling back to traditional method:', error);
+      }
+    }
+
+    // Fallback to traditional method
+    console.log('📝 Using traditional LLM approach');
+    return this.generateQuestionTraditional({ config, previousQuestions, previousResponses, questionNumber });
+  }
+
+  async generateQuestionTraditional({ config, previousQuestions, previousResponses, questionNumber }) {
     const systemPrompt = `You are an expert AI interviewer conducting a ${config.style} interview for a ${config.experienceLevel} level candidate interested in ${config.topic}. ${config.companyName ? `The interview is for ${config.companyName}.` : ''}
 
 Your role is to:
@@ -292,5 +330,13 @@ Provide comprehensive analytics in this JSON format:
         feedback: "Good response with room for improvement."
       }))
     };
+  }
+
+  // Get agentic framework statistics
+  getAgenticStats() {
+    if (this.agenticOrchestrator) {
+      return this.agenticOrchestrator.getSessionStats();
+    }
+    return { status: 'not_initialized' };
   }
 }
