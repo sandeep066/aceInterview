@@ -18,7 +18,7 @@ export class LLMQuestionGenerator {
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       this.geminiAI = new GoogleGenerativeAI(this.apiKey);
       this.geminiModel = this.geminiAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-      console.log('✅ Gemini AI initialized successfully');
+      console.log('✅ Gemini 2.0 Flash initialized successfully');
     } catch (error) {
       console.error('❌ Failed to initialize Gemini AI:', error);
       this.geminiAI = null;
@@ -50,7 +50,7 @@ export class LLMQuestionGenerator {
       case 'anthropic':
         return 'https://api.anthropic.com/v1/messages';
       case 'gemini':
-        return 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent';
+        return 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
       case 'openai':
       default:
         return 'https://api.openai.com/v1/chat/completions';
@@ -95,17 +95,17 @@ export class LLMQuestionGenerator {
       
       fullPrompt += '\nAssistant:';
 
-      console.log(`[Gemini] Sending request with prompt length: ${fullPrompt.length}`);
+      console.log(`[Gemini 2.0 Flash] Sending request with prompt length: ${fullPrompt.length}`);
       
       const result = await this.geminiModel.generateContent(fullPrompt);
       const response = await result.response;
       const text = response.text();
       
-      console.log(`[Gemini] Received response with length: ${text.length}`);
+      console.log(`[Gemini 2.0 Flash] Received response with length: ${text.length}`);
       return text;
       
     } catch (error) {
-      console.error('[Gemini] API call failed:', error);
+      console.error('[Gemini 2.0 Flash] API call failed:', error);
       throw new Error(`Gemini API error: ${error.message}`);
     }
   }
