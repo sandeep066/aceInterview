@@ -158,7 +158,7 @@ export class LLMQuestionGenerator {
       : messages;
     
     const requestBody = {
-      model: 'gpt-4.1-nano',
+      model: 'gpt-4o-mini',
       messages: allMessages,
       max_tokens: 1000,
       temperature: 0.7
@@ -363,7 +363,7 @@ Return a JSON object with this structure:
     try {
       const analysis = await this.makeAPICall(messages, systemPrompt);
       
-      // Clean the response to remove markdown code block delimiters
+      // Clean the response to remove markdown code block delimiters and stray backticks
       let cleanedAnalysis = analysis.trim();
       
       if (cleanedAnalysis.startsWith('```json')) {
@@ -377,6 +377,8 @@ Return a JSON object with this structure:
       }
       
       cleanedAnalysis = cleanedAnalysis.trim();
+      // Add general backtick removal
+      cleanedAnalysis = cleanedAnalysis.replace(/^`+|`+$/g, '');
       
       return JSON.parse(cleanedAnalysis);
     } catch (error) {
@@ -465,7 +467,7 @@ Provide comprehensive analytics in this JSON format:
     try {
       const analytics = await this.makeAPICall(messages, systemPrompt);
       
-      // Clean the response to remove markdown code block delimiters
+      // Clean the response to remove markdown code block delimiters and stray backticks
       let cleanedAnalytics = analytics.trim();
       
       if (cleanedAnalytics.startsWith('```json')) {
@@ -479,6 +481,8 @@ Provide comprehensive analytics in this JSON format:
       }
       
       cleanedAnalytics = cleanedAnalytics.trim();
+      // Add general backtick removal
+      cleanedAnalytics = cleanedAnalytics.replace(/^`+|`+$/g, '');
       
       return JSON.parse(cleanedAnalytics);
     } catch (error) {
