@@ -336,16 +336,22 @@ Return a JSON object with this structure:
     if (this.performanceAnalysisOrchestrator) {
       try {
         console.log(`🧠 Using agentic framework with ${this.provider.toUpperCase()} for performance analysis`);
+        console.log(`📊 Analyzing ${responses.length} responses for comprehensive analytics`);
+        
         const analytics = await this.performanceAnalysisOrchestrator.generateComprehensiveAnalytics({
           responses,
           config
         });
         
         console.log('✅ Agentic performance analysis completed successfully');
+        console.log(`📈 Overall score: ${analytics.overallScore}%`);
         return analytics;
       } catch (error) {
         console.error('❌ Agentic performance analysis failed, falling back to traditional method:', error);
+        console.error('Error details:', error.message);
       }
+    } else {
+      console.log('⚠️ Performance Analysis Orchestrator not initialized, using traditional method');
     }
 
     // Fallback to traditional analysis
