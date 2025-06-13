@@ -93,21 +93,34 @@ Focus on:
       // Clean the response to remove markdown code block delimiters
       let cleanedResponse = response.trim();
       
+      console.log(`[OverallAnalysisAgent] Original response length: ${cleanedResponse.length}`);
+      console.log(`[OverallAnalysisAgent] Response starts with: "${cleanedResponse.substring(0, 50)}..."`);
+      
       // Remove leading ```json or ``` and trailing ```
+      let cleaningApplied = false;
+      
       if (cleanedResponse.startsWith('```json')) {
         cleanedResponse = cleanedResponse.substring(7);
+        cleaningApplied = true;
+        console.log('[OverallAnalysisAgent] Removed leading ```json delimiter');
       } else if (cleanedResponse.startsWith('```')) {
         cleanedResponse = cleanedResponse.substring(3);
+        cleaningApplied = true;
+        console.log('[OverallAnalysisAgent] Removed leading ``` delimiter');
       }
       
       if (cleanedResponse.endsWith('```')) {
         cleanedResponse = cleanedResponse.substring(0, cleanedResponse.length - 3);
+        cleaningApplied = true;
+        console.log('[OverallAnalysisAgent] Removed trailing ``` delimiter');
       }
       
       // Trim any remaining whitespace
       cleanedResponse = cleanedResponse.trim();
       
       console.log(`[OverallAnalysisAgent] Cleaned response length: ${cleanedResponse.length}`);
+      console.log(`[OverallAnalysisAgent] Cleaning applied: ${cleaningApplied}`);
+      console.log(`[OverallAnalysisAgent] Cleaned response starts with: "${cleanedResponse.substring(0, 50)}..."`);
       
       const result = JSON.parse(cleanedResponse);
       
@@ -147,14 +160,69 @@ Focus on:
         metadata: {
           analyzedAt: new Date().toISOString(),
           totalResponses: input.responseAnalyses.length,
-          averageResponseLength: input.responseAnalyses.reduce((sum, r) => sum + r.response.length, 0) / input.responseAnalyses.length
+          averageResponseLength: input.responseAnalyses.reduce((sum, r) => sum + r.response.length, 0) / input.responseAnalyses.length,
+          cleaningApplied
         }
       };
     } catch (error) {
-      console.error('Failed to parse overall analysis:', error);
-      console.error('Raw response preview:', response.substring(0, 200) + '...');
+      console.error('[OverallAnalysisAgent] Failed to parse overall analysis:', error);
+      console.error('[OverallAnalysisAgent] Raw response preview:', response.substring(0, 300) + '...');
+      
+      // Try to extract JSON from the response if it's embedded in text
+      try {
+        console.log('[OverallAnalysisAgent] Attempting to extract JSON from response...');
+        
+        // Look for JSON object patterns in the response
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const extractedJson = jsonMatch[0];
+          console.log(`[OverallAnalysisAgent] Found potential JSON, length: ${extractedJson.length}`);
+          
+          const result = JSON.parse(extractedJson);
+          
+          // Apply same validation as above
+          if (result.overallScore && result.responseAnalysis) {
+            console.log('[OverallAnalysisAgent] Successfully extracted and parsed JSON from response');
+            
+            // Ensure scores are within valid range
+            const scores = result.responseAnalysis;
+            const scoreFields = ['clarity', 'structure', 'technical', 'communication', 'confidence'];
+            
+            for (const field of scoreFields) {
+              if (typeof scores[field] !== 'number' || scores[field] < 0 || scores[field] > 100) {
+                scores[field] = 70;
+              }
+            }
+            
+            if (typeof result.overallScore !== 'number' || result.overallScore < 0 || result.overallScore > 100) {
+              result.overallScore = Math.round(Object.values(scores).reduce((sum, score) => sum + score, 0) / scoreFields.length);
+            }
+            
+            if (!result.performanceLevel) {
+              if (result.overallScore >= 85) result.performanceLevel = 'excellent';
+              else if (result.overallScore >= 70) result.performanceLevel = 'good';
+              else if (result.overallScore >= 60) result.performanceLevel = 'fair';
+              else result.performanceLevel = 'needs_improvement';
+            }
+            
+            return {
+              success: true,
+              analysis: result,
+              metadata: {
+                analyzedAt: new Date().toISOString(),
+                totalResponses: input.responseAnalyses.length,
+                averageResponseLength: input.responseAnalyses.reduce((sum, r) => sum + r.response.length, 0) / input.responseAnalyses.length,
+                extractedFromText: true
+              }
+            };
+          }
+        }
+      } catch (extractError) {
+        console.error('[OverallAnalysisAgent] JSON extraction also failed:', extractError);
+      }
       
       // Generate fallback analysis
+      console.log('[OverallAnalysisAgent] Using fallback analysis due to parsing failure');
       return {
         success: false,
         analysis: this.generateFallbackAnalysis(input),
@@ -162,7 +230,8 @@ Focus on:
           analyzedAt: new Date().toISOString(),
           totalResponses: input.responseAnalyses.length,
           fallback: true,
-          parseError: error.message
+          parseError: error.message,
+          originalResponseLength: response.length
         }
       };
     }
@@ -170,6 +239,8 @@ Focus on:
 
   generateFallbackAnalysis(input) {
     const { responseAnalyses, config } = input;
+    
+    console.log('[OverallAnalysisAgent] Generating fallback analysis');
     
     // Calculate averages from individual analyses
     const avgScores = {
@@ -200,6 +271,8 @@ Focus on:
     if (overallScore >= 85) performanceLevel = 'excellent';
     else if (overallScore >= 70) performanceLevel = 'good';
     else if (overallScore < 60) performanceLevel = 'needs_improvement';
+    
+    console.log(`[OverallAnalysisAgent] Fallback analysis generated with overall score: ${overallScore}`);
     
     return {
       overallScore,
