@@ -16,7 +16,8 @@ import {
   WifiOff,
   AlertCircle,
   Phone,
-  Monitor
+  Monitor,
+  Brain
 } from 'lucide-react';
 import { InterviewConfig } from '../types';
 import { AIInterviewSimulator } from '../utils/aiSimulator';
@@ -247,6 +248,7 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
   const [isConnected, setIsConnected] = useState(false);
   const [connectionChecked, setConnectionChecked] = useState(false);
   const [showConnectionInfo, setShowConnectionInfo] = useState(false);
+  const [isLoadingQuestion, setIsLoadingQuestion] = useState(false);
   
   const {
     isListening,
@@ -328,21 +330,47 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
 
   const loadNextQuestion = async () => {
     setIsThinking(true);
+    setIsLoadingQuestion(true);
     
     try {
+      console.log('🔄 Loading next question...');
+      const startTime = Date.now();
+      
       const question = await simulator.getNextQuestion();
+      
+      const duration = Date.now() - startTime;
+      console.log(`⏱️ Question loaded in ${duration}ms`);
+      
       if (question) {
         setCurrentQuestion(question);
         setTextResponse('');
         resetTranscript();
+        console.log('✅ Question set successfully');
       } else {
+        console.log('🏁 No more questions, ending interview');
         endInterview();
       }
     } catch (error) {
-      console.error('Error loading question:', error);
+      console.error('❌ Error loading question:', error);
+      // Force fallback mode if there's an error
+      simulator.forceFallbackMode();
+      try {
+        const fallbackQuestion = await simulator.getNextQuestion();
+        if (fallbackQuestion) {
+          setCurrentQuestion(fallbackQuestion);
+          setTextResponse('');
+          resetTranscript();
+        } else {
+          endInterview();
+        }
+      } catch (fallbackError) {
+        console.error('❌ Even fallback failed:', fallbackError);
+        endInterview();
+      }
+    } finally {
+      setIsThinking(false);
+      setIsLoadingQuestion(false);
     }
-    
-    setIsThinking(false);
   };
 
   const submitResponse = async () => {
@@ -403,8 +431,8 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
                     <>
                       {isConnected ? (
                         <div className="flex items-center text-green-600 text-sm">
-                          <Wifi className="w-4 h-4 mr-1" />
-                          AI Connected
+                          <Brain className="w-4 h-4 mr-1" />
+                          {simulator.isUsingAgentic() ? 'Agentic AI' : 'Fallback Mode'}
                         </div>
                       ) : (
                         <div className="flex items-center text-amber-600 text-sm">
@@ -443,6 +471,21 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
               </div>
             )}
 
+            {/* Loading Question Alert */}
+            {isLoadingQuestion && (
+              <div className="mb-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                <div className="flex items-center">
+                  <Brain className="w-5 h-5 text-purple-600 mr-3 animate-pulse" />
+                  <div className="text-purple-800 text-sm">
+                    <p className="font-medium">Agentic AI is generating your question...</p>
+                    <p className="text-xs text-purple-600 mt-1">
+                      This may take up to 2 minutes for the best quality questions
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Progress Bar */}
             <div className="mb-4">
               <div className="flex justify-between items-center mb-2">
@@ -467,7 +510,8 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
                 {!isInterviewActive ? (
                   <button
                     onClick={startInterview}
-                    className="inline-flex items-center px-6 py-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-300 transition-all"
+                    disabled={isLoadingQuestion}
+                    className="inline-flex items-center px-6 py-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Play className="w-4 h-4 mr-2" />
                     {startTime ? 'Resume' : 'Start'} Interview
@@ -475,7 +519,8 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
                 ) : (
                   <button
                     onClick={pauseInterview}
-                    className="inline-flex items-center px-6 py-3 bg-yellow-600 text-white font-semibold rounded-xl hover:bg-yellow-700 focus:outline-none focus:ring-4 focus:ring-yellow-300 transition-all"
+                    disabled={isLoadingQuestion}
+                    className="inline-flex items-center px-6 py-3 bg-yellow-600 text-white font-semibold rounded-xl hover:bg-yellow-700 focus:outline-none focus:ring-4 focus:ring-yellow-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Pause className="w-4 h-4 mr-2" />
                     Pause
@@ -523,17 +568,22 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">AI Interviewer</h3>
                     <p className="text-sm text-gray-600">
-                      {isConnected ? 'LLM-Powered Interview Assistant' : 'Practice Interview Assistant'}
+                      {isConnected ? (simulator.isUsingAgentic() ? 'Agentic AI-Powered Assistant' : 'LLM-Powered Assistant') : 'Practice Interview Assistant'}
                     </p>
                   </div>
                 </div>
 
                 <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 min-h-[200px]">
-                  {isThinking ? (
+                  {isThinking || isLoadingQuestion ? (
                     <div className="flex items-center justify-center h-full">
                       <Loader className="w-6 h-6 text-blue-600 animate-spin mr-3" />
                       <span className="text-gray-600">
-                        {isConnected ? 'AI is generating your next question...' : 'Preparing next question...'}
+                        {isLoadingQuestion 
+                          ? 'Agentic AI is crafting your personalized question...' 
+                          : isConnected 
+                            ? 'AI is generating your next question...' 
+                            : 'Preparing next question...'
+                        }
                       </span>
                     </div>
                   ) : currentQuestion ? (
@@ -566,7 +616,7 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
                     onChange={(e) => setTextResponse(e.target.value)}
                     placeholder="Type your response here or use the microphone to speak..."
                     className="w-full h-32 px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors"
-                    disabled={!isInterviewActive}
+                    disabled={!isInterviewActive || isLoadingQuestion}
                   />
 
                   <div className="flex items-center justify-between">
@@ -574,7 +624,7 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
                       {speechSupported && (
                         <button
                           onClick={toggleMicrophone}
-                          disabled={!isInterviewActive}
+                          disabled={!isInterviewActive || isLoadingQuestion}
                           className={`p-3 rounded-xl transition-all ${
                             isListening
                               ? 'bg-red-100 text-red-600 animate-pulse'
@@ -595,7 +645,7 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
 
                     <button
                       onClick={submitResponse}
-                      disabled={!isInterviewActive || !textResponse.trim()}
+                      disabled={!isInterviewActive || !textResponse.trim() || isLoadingQuestion}
                       className="inline-flex items-center px-6 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >
                       <Send className="w-4 h-4 mr-2" />

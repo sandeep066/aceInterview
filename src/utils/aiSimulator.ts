@@ -31,12 +31,18 @@ export class AIInterviewSimulator {
       }
 
       if (this.isUsingLLM) {
+        console.log('🤖 Requesting question from agentic framework...');
+        const startTime = Date.now();
+        
         const question = await APIService.generateQuestion({
           config: this.config,
           previousQuestions: this.generatedQuestions,
           previousResponses: this.responses,
           questionNumber: this.currentQuestionIndex + 1
         });
+
+        const duration = Date.now() - startTime;
+        console.log(`✅ Agentic question received in ${duration}ms`);
 
         this.generatedQuestions.push(question);
         return question;
@@ -45,7 +51,8 @@ export class AIInterviewSimulator {
         return this.getFallbackQuestion();
       }
     } catch (error) {
-      console.error('Error getting next question:', error);
+      console.error('❌ Error getting next question from agentic framework:', error);
+      console.log('🔄 Falling back to predefined questions');
       // Fallback to predefined questions if LLM fails
       this.isUsingLLM = false;
       return this.getFallbackQuestion();
@@ -97,6 +104,7 @@ export class AIInterviewSimulator {
       return null;
     }
 
+    console.log(`📝 Using fallback question ${this.currentQuestionIndex + 1}`);
     return questions[this.currentQuestionIndex];
   }
 
@@ -320,5 +328,16 @@ export class AIInterviewSimulator {
         feedback: feedbacks[Math.floor(Math.random() * feedbacks.length)]
       };
     });
+  }
+
+  // Add method to check if using LLM
+  isUsingAgentic(): boolean {
+    return this.isUsingLLM;
+  }
+
+  // Add method to force fallback mode
+  forceFallbackMode(): void {
+    console.log('🔄 Forcing fallback mode');
+    this.isUsingLLM = false;
   }
 }
