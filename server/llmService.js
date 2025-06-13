@@ -1,11 +1,29 @@
 export class LLMQuestionGenerator {
   constructor() {
-    this.apiKey = process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY;
-    this.provider = process.env.LLM_PROVIDER || 'openai'; // 'openai' or 'anthropic'
+    this.apiKey = process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY;
+    this.provider = process.env.LLM_PROVIDER || 'openai'; // 'openai', 'anthropic', or 'gemini'
     this.baseURL = this.getBaseURL();
+    
+    // Initialize Gemini if using Google's API
+    if (this.provider === 'gemini') {
+      this.initializeGemini();
+    }
     
     // Initialize agentic frameworks
     this.initializeAgenticFrameworks();
+  }
+
+  async initializeGemini() {
+    try {
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      this.geminiAI = new GoogleGenerativeAI(this.apiKey);
+      this.geminiModel = this.geminiAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+      console.log('✅ Gemini AI initialized successfully');
+    } catch (error) {
+      console.error('❌ Failed to initialize Gemini AI:', error);
+      this.geminiAI = null;
+      this.geminiModel = null;
+    }
   }
 
   async initializeAgenticFrameworks() {
@@ -31,6 +49,8 @@ export class LLMQuestionGenerator {
     switch (this.provider) {
       case 'anthropic':
         return 'https://api.anthropic.com/v1/messages';
+      case 'gemini':
+        return 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent';
       case 'openai':
       default:
         return 'https://api.openai.com/v1/chat/completions';
@@ -38,39 +58,76 @@ export class LLMQuestionGenerator {
   }
 
   async makeAPICall(messages, systemPrompt = '') {
+    console.log(`[LLM] Making API call using ${this.provider.toUpperCase()}`);
+    
+    switch (this.provider) {
+      case 'gemini':
+        return await this.makeGeminiCall(messages, systemPrompt);
+      case 'anthropic':
+        return await this.makeAnthropicCall(messages, systemPrompt);
+      case 'openai':
+      default:
+        return await this.makeOpenAICall(messages, systemPrompt);
+    }
+  }
+
+  async makeGeminiCall(messages, systemPrompt = '') {
+    if (!this.geminiModel) {
+      throw new Error('Gemini model not initialized');
+    }
+
+    try {
+      // Combine system prompt and messages for Gemini
+      let fullPrompt = '';
+      
+      if (systemPrompt) {
+        fullPrompt += `System Instructions: ${systemPrompt}\n\n`;
+      }
+      
+      // Convert messages to a single prompt for Gemini
+      messages.forEach(msg => {
+        if (msg.role === 'user') {
+          fullPrompt += `User: ${msg.content}\n`;
+        } else if (msg.role === 'assistant') {
+          fullPrompt += `Assistant: ${msg.content}\n`;
+        }
+      });
+      
+      fullPrompt += '\nAssistant:';
+
+      console.log(`[Gemini] Sending request with prompt length: ${fullPrompt.length}`);
+      
+      const result = await this.geminiModel.generateContent(fullPrompt);
+      const response = await result.response;
+      const text = response.text();
+      
+      console.log(`[Gemini] Received response with length: ${text.length}`);
+      return text;
+      
+    } catch (error) {
+      console.error('[Gemini] API call failed:', error);
+      throw new Error(`Gemini API error: ${error.message}`);
+    }
+  }
+
+  async makeAnthropicCall(messages, systemPrompt = '') {
     const headers = {
       'Content-Type': 'application/json',
+      'x-api-key': this.apiKey,
+      'anthropic-version': '2023-06-01'
+    };
+    
+    const requestBody = {
+      model: 'claude-3-sonnet-20240229',
+      max_tokens: 1000,
+      system: systemPrompt,
+      messages: messages.map(msg => ({
+        role: msg.role === 'system' ? 'user' : msg.role,
+        content: msg.content
+      }))
     };
 
-    let requestBody;
-
-    if (this.provider === 'anthropic') {
-      headers['x-api-key'] = this.apiKey;
-      headers['anthropic-version'] = '2023-06-01';
-      
-      requestBody = {
-        model: 'claude-3-sonnet-20240229',
-        max_tokens: 1000,
-        system: systemPrompt,
-        messages: messages.map(msg => ({
-          role: msg.role === 'system' ? 'user' : msg.role,
-          content: msg.content
-        }))
-      };
-    } else {
-      headers['Authorization'] = `Bearer ${this.apiKey}`;
-      
-      const allMessages = systemPrompt 
-        ? [{ role: 'system', content: systemPrompt }, ...messages]
-        : messages;
-      
-      requestBody = {
-        model: 'gpt-4-turbo-preview',
-        messages: allMessages,
-        max_tokens: 1000,
-        temperature: 0.7
-      };
-    }
+    console.log(`[Anthropic] Sending request`);
 
     const response = await fetch(this.baseURL, {
       method: 'POST',
@@ -79,23 +136,53 @@ export class LLMQuestionGenerator {
     });
 
     if (!response.ok) {
-      throw new Error(`LLM API error: ${response.status} ${response.statusText}`);
+      throw new Error(`Anthropic API error: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
+    console.log(`[Anthropic] Received response`);
+    return data.content[0].text;
+  }
+
+  async makeOpenAICall(messages, systemPrompt = '') {
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${this.apiKey}`
+    };
     
-    if (this.provider === 'anthropic') {
-      return data.content[0].text;
-    } else {
-      return data.choices[0].message.content;
+    const allMessages = systemPrompt 
+      ? [{ role: 'system', content: systemPrompt }, ...messages]
+      : messages;
+    
+    const requestBody = {
+      model: 'gpt-4-turbo-preview',
+      messages: allMessages,
+      max_tokens: 1000,
+      temperature: 0.7
+    };
+
+    console.log(`[OpenAI] Sending request`);
+
+    const response = await fetch(this.baseURL, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
     }
+
+    const data = await response.json();
+    console.log(`[OpenAI] Received response`);
+    return data.choices[0].message.content;
   }
 
   async generateQuestion({ config, previousQuestions, previousResponses, questionNumber }) {
     // Try agentic approach first
     if (this.agenticOrchestrator) {
       try {
-        console.log('🤖 Using agentic framework for question generation');
+        console.log(`🤖 Using agentic framework with ${this.provider.toUpperCase()} for question generation`);
         const question = await this.agenticOrchestrator.generateQuestion({
           config,
           previousQuestions,
@@ -111,7 +198,7 @@ export class LLMQuestionGenerator {
     }
 
     // Fallback to traditional method
-    console.log('📝 Using traditional LLM approach');
+    console.log(`📝 Using traditional ${this.provider.toUpperCase()} approach`);
     return this.generateQuestionTraditional({ config, previousQuestions, previousResponses, questionNumber });
   }
 
@@ -248,7 +335,7 @@ Return a JSON object with this structure:
     // Try agentic performance analysis first
     if (this.performanceAnalysisOrchestrator) {
       try {
-        console.log('🧠 Using agentic framework for performance analysis');
+        console.log(`🧠 Using agentic framework with ${this.provider.toUpperCase()} for performance analysis`);
         const analytics = await this.performanceAnalysisOrchestrator.generateComprehensiveAnalytics({
           responses,
           config
@@ -262,7 +349,7 @@ Return a JSON object with this structure:
     }
 
     // Fallback to traditional analysis
-    console.log('📊 Using traditional analytics approach');
+    console.log(`📊 Using traditional ${this.provider.toUpperCase()} analytics approach`);
     return this.generateComprehensiveAnalyticsTraditional({ responses, config });
   }
 
@@ -368,6 +455,7 @@ Provide comprehensive analytics in this JSON format:
     const analysisStats = this.performanceAnalysisOrchestrator ? this.performanceAnalysisOrchestrator.getAnalysisStats() : { status: 'not_initialized' };
     
     return {
+      provider: this.provider.toUpperCase(),
       questionGeneration: questionStats,
       performanceAnalysis: analysisStats
     };
