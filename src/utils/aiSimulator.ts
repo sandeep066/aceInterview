@@ -9,6 +9,7 @@ export class AIInterviewSimulator {
   private generatedQuestions: string[];
   private isUsingLLM: boolean;
   private nextQuestionCache: string | null = null;
+  private isInterviewEnded: boolean = false;
 
   constructor(config: InterviewConfig) {
     this.config = config;
@@ -18,17 +19,33 @@ export class AIInterviewSimulator {
     this.generatedQuestions = [];
     this.isUsingLLM = true;
     this.nextQuestionCache = null;
+    this.isInterviewEnded = false;
   }
 
   async getNextQuestion(): Promise<string | null> {
     try {
-      // Check if we've reached the maximum questions based on duration
-      const maxQuestions = Math.min(
-        Math.max(3, Math.floor(this.config.duration / 15)),
-        8
-      );
+      // Check if interview has been manually ended
+      if (this.isInterviewEnded) {
+        console.log('🏁 Interview has been manually ended');
+        return null;
+      }
+
+      // Calculate maximum questions based on duration with proper scaling
+      const maxQuestions = this.calculateMaxQuestions();
+      console.log(`📊 Question ${this.currentQuestionIndex + 1} of ${maxQuestions} (Duration: ${this.config.duration} minutes)`);
 
       if (this.currentQuestionIndex >= maxQuestions) {
+        console.log('🏁 Reached maximum questions for duration');
+        return null;
+      }
+
+      // Check time limit (with some buffer for completion)
+      const timeElapsed = Date.now() - this.startTime;
+      const maxDuration = this.config.duration * 60 * 1000; // Convert to milliseconds
+      const timeBuffer = 2 * 60 * 1000; // 2 minute buffer for completion
+      
+      if (timeElapsed > (maxDuration + timeBuffer)) {
+        console.log('⏰ Time limit exceeded');
         return null;
       }
 
@@ -75,17 +92,74 @@ export class AIInterviewSimulator {
   }
 
   /**
+   * Calculate maximum questions based on duration with proper scaling
+   */
+  private calculateMaxQuestions(): number {
+    // More sophisticated calculation based on duration
+    // Assumes roughly 3-8 minutes per question depending on complexity and experience level
+    
+    let timePerQuestion = 5; // Default 5 minutes per question
+    
+    // Adjust based on experience level
+    switch (this.config.experienceLevel) {
+      case 'fresher':
+        timePerQuestion = 4; // Shorter questions for beginners
+        break;
+      case 'junior':
+        timePerQuestion = 5;
+        break;
+      case 'mid-level':
+        timePerQuestion = 6;
+        break;
+      case 'senior':
+        timePerQuestion = 7; // More complex questions
+        break;
+      case 'lead-manager':
+        timePerQuestion = 8; // Most complex questions
+        break;
+    }
+    
+    // Adjust based on interview style
+    switch (this.config.style) {
+      case 'technical':
+        timePerQuestion += 1; // Technical questions take longer
+        break;
+      case 'case-study':
+        timePerQuestion += 2; // Case studies take much longer
+        break;
+      case 'behavioral':
+        timePerQuestion += 0.5; // Behavioral questions are moderate
+        break;
+      case 'hr':
+        timePerQuestion -= 0.5; // HR questions are typically shorter
+        break;
+      case 'salary-negotiation':
+        timePerQuestion -= 1; // Negotiation questions are shorter
+        break;
+    }
+    
+    const calculatedQuestions = Math.floor(this.config.duration / timePerQuestion);
+    
+    // Ensure reasonable bounds
+    const minQuestions = 3;
+    const maxQuestions = Math.min(15, Math.max(8, Math.floor(this.config.duration / 3))); // Cap at 15, but allow more for longer durations
+    
+    const finalCount = Math.max(minQuestions, Math.min(maxQuestions, calculatedQuestions));
+    
+    console.log(`📊 Question calculation: Duration=${this.config.duration}min, TimePerQ=${timePerQuestion}min, Calculated=${calculatedQuestions}, Final=${finalCount}`);
+    
+    return finalCount;
+  }
+
+  /**
    * Pre-generate the next question in the background for faster response
    */
   private async preGenerateNextQuestion(): Promise<void> {
     try {
-      const maxQuestions = Math.min(
-        Math.max(3, Math.floor(this.config.duration / 15)),
-        8
-      );
+      const maxQuestions = this.calculateMaxQuestions();
 
       // Only pre-generate if there will be a next question
-      if (this.currentQuestionIndex + 1 < maxQuestions && this.isUsingLLM) {
+      if (this.currentQuestionIndex + 1 < maxQuestions && this.isUsingLLM && !this.isInterviewEnded) {
         console.log('🔄 Pre-generating next question in background...');
         
         // Don't await this - let it run in background
@@ -95,8 +169,10 @@ export class AIInterviewSimulator {
           previousResponses: this.responses,
           questionNumber: this.currentQuestionIndex + 2
         }).then(question => {
-          this.nextQuestionCache = question;
-          console.log('✅ Next question pre-generated and cached');
+          if (!this.isInterviewEnded) { // Only cache if interview hasn't ended
+            this.nextQuestionCache = question;
+            console.log('✅ Next question pre-generated and cached');
+          }
         }).catch(error => {
           console.error('❌ Pre-generation failed:', error);
           // Don't set cache on failure
@@ -114,41 +190,87 @@ export class AIInterviewSimulator {
         "How would you optimize the performance of a web application?",
         "Describe your approach to debugging a complex issue.",
         "What are the key principles of good software design?",
-        "How do you ensure code quality in your projects?"
+        "How do you ensure code quality in your projects?",
+        "Explain the concept of design patterns and give examples.",
+        "How do you handle error handling in your applications?",
+        "Describe your experience with testing methodologies.",
+        "What are the security considerations in web development?",
+        "How do you approach code reviews and collaboration?",
+        "Explain the importance of documentation in software development.",
+        "How do you stay updated with new technologies and trends?",
+        "Describe your experience with version control systems.",
+        "What are the best practices for database design?",
+        "How do you approach performance monitoring and optimization?"
       ],
       hr: [
         "Tell me about yourself and your career goals.",
         "Why are you interested in this position?",
         "How do you handle working under pressure?",
         "What motivates you in your work?",
-        "Where do you see yourself in 5 years?"
+        "Where do you see yourself in 5 years?",
+        "Describe your ideal work environment.",
+        "How do you handle feedback and criticism?",
+        "What are your greatest strengths and weaknesses?",
+        "Why are you looking to leave your current position?",
+        "How do you prioritize work-life balance?",
+        "What type of management style works best for you?",
+        "How do you handle conflicts with colleagues?",
+        "What are your salary expectations?",
+        "How do you continue learning and developing professionally?",
+        "What questions do you have about our company?"
       ],
       behavioral: [
         "Tell me about a challenging project you worked on.",
         "Describe a time when you had to work with a difficult team member.",
         "Give me an example of when you had to learn something new quickly.",
         "Tell me about a time you failed and how you handled it.",
-        "Describe a situation where you had to make a difficult decision."
+        "Describe a situation where you had to make a difficult decision.",
+        "Tell me about a time you had to meet a tight deadline.",
+        "Describe a situation where you had to persuade someone.",
+        "Give me an example of when you showed leadership.",
+        "Tell me about a time you had to adapt to change.",
+        "Describe a situation where you went above and beyond.",
+        "Tell me about a time you had to handle multiple priorities.",
+        "Describe a situation where you had to work with limited resources.",
+        "Give me an example of when you took initiative.",
+        "Tell me about a time you had to give difficult feedback.",
+        "Describe a situation where you had to solve a complex problem."
       ],
       'salary-negotiation': [
         "What are your salary expectations for this role?",
         "How do you evaluate the total compensation package?",
         "What factors are most important to you besides salary?",
         "How flexible are you with your compensation requirements?",
-        "What would make you accept an offer below your expectations?"
+        "What would make you accept an offer below your expectations?",
+        "How do you research market rates for your position?",
+        "What benefits are most valuable to you?",
+        "How do you approach negotiating equity or stock options?",
+        "What's your timeline for making a decision on an offer?",
+        "How do you balance salary with career growth opportunities?"
       ],
       'case-study': [
         "How would you approach designing a system for handling high traffic?",
         "Walk me through how you would solve a performance issue.",
         "Describe your process for making technical decisions.",
         "How would you handle a critical production incident?",
-        "What's your approach to evaluating new technologies?"
+        "What's your approach to evaluating new technologies?",
+        "How would you design a scalable database architecture?",
+        "Describe how you would implement a caching strategy.",
+        "How would you approach migrating a legacy system?",
+        "What's your process for conducting a technical audit?",
+        "How would you design a monitoring and alerting system?",
+        "Describe your approach to capacity planning.",
+        "How would you implement a disaster recovery plan?",
+        "What's your strategy for managing technical debt?",
+        "How would you approach API design and versioning?",
+        "Describe your process for security assessment and implementation."
       ]
     };
-
+    
     const questions = fallbackQuestions[this.config.style] || fallbackQuestions.technical;
     
     if (this.currentQuestionIndex >= questions.length) {
+      console.log('🏁 Exhausted all fallback questions');
       return null;
     }
 
@@ -197,18 +319,36 @@ export class AIInterviewSimulator {
   }
 
   isInterviewComplete(): boolean {
-    const maxQuestions = Math.min(
-      Math.max(3, Math.floor(this.config.duration / 15)),
-      8
-    );
-    return this.currentQuestionIndex >= maxQuestions;
+    if (this.isInterviewEnded) {
+      return true;
+    }
+    
+    const maxQuestions = this.calculateMaxQuestions();
+    const timeElapsed = Date.now() - this.startTime;
+    const maxDuration = this.config.duration * 60 * 1000;
+    
+    return this.currentQuestionIndex >= maxQuestions || timeElapsed > maxDuration;
+  }
+
+  /**
+   * Manually end the interview early
+   */
+  endInterviewEarly(): void {
+    console.log('🛑 Interview ended early by user');
+    this.isInterviewEnded = true;
+    this.nextQuestionCache = null; // Clear any cached questions
+  }
+
+  /**
+   * Check if interview was ended early
+   */
+  wasEndedEarly(): boolean {
+    const maxQuestions = this.calculateMaxQuestions();
+    return this.isInterviewEnded && this.currentQuestionIndex < maxQuestions;
   }
 
   getProgress(): { current: number; total: number; percentage: number } {
-    const maxQuestions = Math.min(
-      Math.max(3, Math.floor(this.config.duration / 15)),
-      8
-    );
+    const maxQuestions = this.calculateMaxQuestions();
     const current = Math.min(this.currentQuestionIndex + 1, maxQuestions);
     const percentage = (current / maxQuestions) * 100;
     
@@ -228,6 +368,12 @@ export class AIInterviewSimulator {
         
         const duration = Date.now() - startTime;
         console.log(`✅ Agentic analytics completed in ${duration}ms`);
+        
+        // Add early termination info to metadata
+        if (analytics.metadata) {
+          analytics.metadata.wasEndedEarly = this.wasEndedEarly();
+          analytics.metadata.completionRate = (this.responses.length / this.calculateMaxQuestions()) * 100;
+        }
         
         return analytics;
       } catch (error) {
@@ -267,7 +413,10 @@ export class AIInterviewSimulator {
       metadata: {
         generatedAt: new Date().toISOString(),
         analysisMethod: 'fallback',
-        totalResponses: this.responses.length
+        totalResponses: this.responses.length,
+        wasEndedEarly: this.wasEndedEarly(),
+        completionRate: (this.responses.length / this.calculateMaxQuestions()) * 100,
+        maxQuestionsCalculated: this.calculateMaxQuestions()
       }
     };
   }
@@ -345,6 +494,12 @@ export class AIInterviewSimulator {
     if (analysis.communication >= 80) strengths.push("Excellent communication skills");
     if (analysis.confidence >= 80) strengths.push("Confident and decisive responses");
     
+    // Add completion-based strengths
+    const completionRate = (this.responses.length / this.calculateMaxQuestions()) * 100;
+    if (completionRate >= 80) {
+      strengths.push("Completed most of the interview successfully");
+    }
+    
     return strengths.length > 0 ? strengths : ["Shows enthusiasm and willingness to learn"];
   }
 
@@ -356,6 +511,11 @@ export class AIInterviewSimulator {
     if (analysis.technical < 70) improvements.push("Strengthen technical knowledge in core areas");
     if (analysis.communication < 70) improvements.push("Practice active listening and more engaging responses");
     if (analysis.confidence < 70) improvements.push("Build confidence through more practice and preparation");
+    
+    // Add completion-based improvements
+    if (this.wasEndedEarly()) {
+      improvements.push("Consider completing full interview sessions for comprehensive practice");
+    }
     
     return improvements.length > 0 ? improvements : ["Continue practicing interview scenarios"];
   }
@@ -401,7 +561,11 @@ export class AIInterviewSimulator {
       questionsGenerated: this.generatedQuestions.length,
       responsesSubmitted: this.responses.length,
       hasCachedQuestion: !!this.nextQuestionCache,
-      currentQuestionIndex: this.currentQuestionIndex
+      currentQuestionIndex: this.currentQuestionIndex,
+      maxQuestions: this.calculateMaxQuestions(),
+      isInterviewEnded: this.isInterviewEnded,
+      wasEndedEarly: this.wasEndedEarly(),
+      completionRate: (this.responses.length / this.calculateMaxQuestions()) * 100
     };
   }
 }

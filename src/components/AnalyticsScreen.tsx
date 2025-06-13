@@ -11,7 +11,10 @@ import {
   Download,
   Loader2,
   Brain,
-  Zap
+  Zap,
+  Clock,
+  CheckCircle,
+  AlertTriangle
 } from 'lucide-react';
 import { AIInterviewSimulator } from '../utils/aiSimulator';
 
@@ -92,7 +95,13 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
       improvements: analytics.improvements,
       questionReviews: analytics.questionReviews,
       metadata: analytics.metadata,
-      analysisMethod
+      analysisMethod,
+      completionInfo: {
+        wasEndedEarly: analytics.metadata?.wasEndedEarly || false,
+        completionRate: analytics.metadata?.completionRate || 100,
+        totalResponses: analytics.metadata?.totalResponses || 0,
+        maxQuestions: analytics.metadata?.maxQuestionsCalculated || 0
+      }
     };
     
     const blob = new Blob([JSON.stringify(reportData, null, 2)], {
@@ -205,6 +214,63 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
             </div>
           </div>
 
+          {/* Interview Completion Status */}
+          {analytics.metadata && (
+            <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
+              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                <Clock className="w-5 h-5 mr-2 text-blue-600" />
+                Interview Completion Status
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className={`rounded-xl p-4 ${analytics.metadata.wasEndedEarly ? 'bg-yellow-50' : 'bg-green-50'}`}>
+                  <div className="flex items-center mb-2">
+                    {analytics.metadata.wasEndedEarly ? (
+                      <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
+                    ) : (
+                      <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
+                    )}
+                    <div className={`text-sm font-medium ${analytics.metadata.wasEndedEarly ? 'text-yellow-700' : 'text-green-700'}`}>
+                      {analytics.metadata.wasEndedEarly ? 'Ended Early' : 'Completed'}
+                    </div>
+                  </div>
+                  <div className={`text-lg font-bold ${analytics.metadata.wasEndedEarly ? 'text-yellow-900' : 'text-green-900'}`}>
+                    {Math.round(analytics.metadata.completionRate || 100)}% Complete
+                  </div>
+                </div>
+                
+                <div className="bg-blue-50 rounded-xl p-4">
+                  <div className="text-sm font-medium text-blue-700 mb-1">Questions Answered</div>
+                  <div className="text-lg font-bold text-blue-900">
+                    {analytics.metadata.totalResponses || analytics.questionReviews?.length || 0} / {analytics.metadata.maxQuestionsCalculated || 'N/A'}
+                  </div>
+                </div>
+                
+                <div className="bg-purple-50 rounded-xl p-4">
+                  <div className="text-sm font-medium text-purple-700 mb-1">Analysis Method</div>
+                  <div className="text-lg font-bold text-purple-900 capitalize">
+                    {analytics.metadata.analysisMethod || 'Traditional'}
+                  </div>
+                </div>
+              </div>
+              
+              {analytics.metadata.wasEndedEarly && (
+                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800">
+                    <strong>Note:</strong> This interview was ended early. The analysis is based on the responses provided. 
+                    For more comprehensive feedback, consider completing the full interview duration.
+                  </p>
+                </div>
+              )}
+              
+              {analytics.metadata.generatedAt && (
+                <div className="mt-4 text-sm text-gray-600">
+                  Generated at: {new Date(analytics.metadata.generatedAt).toLocaleString()}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Analysis Method Details */}
           {analytics.metadata && (
             <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
@@ -237,12 +303,6 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
                   </div>
                 </div>
               </div>
-              
-              {analytics.metadata.generatedAt && (
-                <div className="mt-4 text-sm text-gray-600">
-                  Generated at: {new Date(analytics.metadata.generatedAt).toLocaleString()}
-                </div>
-              )}
             </div>
           )}
 

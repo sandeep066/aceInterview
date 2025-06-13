@@ -18,7 +18,8 @@ import {
   Phone,
   Monitor,
   Brain,
-  Zap
+  Zap,
+  StopCircle
 } from 'lucide-react';
 import { InterviewConfig } from '../types';
 import { AIInterviewSimulator } from '../utils/aiSimulator';
@@ -93,6 +94,10 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
               Select how you'd like to conduct your {config.style} interview practice session
             </p>
+            <div className="mt-4 inline-flex items-center px-4 py-2 bg-blue-50 rounded-full text-sm text-blue-800">
+              <Clock className="w-4 h-4 mr-2" />
+              Duration: {config.duration} minutes • Estimated Questions: {Math.floor(config.duration / 5)} - {Math.floor(config.duration / 3)}
+            </div>
           </div>
 
           {/* Loading State */}
@@ -251,6 +256,7 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
   const [showConnectionInfo, setShowConnectionInfo] = useState(false);
   const [isLoadingQuestion, setIsLoadingQuestion] = useState(false);
   const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
+  const [showEndConfirmation, setShowEndConfirmation] = useState(false);
   
   const {
     isListening,
@@ -327,7 +333,25 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
   const endInterview = () => {
     setIsInterviewActive(false);
     stopListening();
+    simulator.endInterviewEarly(); // Mark as ended early
     onEndInterview(simulator);
+  };
+
+  const handleEndInterviewClick = () => {
+    if (simulator.getProgress().current > 1) {
+      setShowEndConfirmation(true);
+    } else {
+      endInterview();
+    }
+  };
+
+  const confirmEndInterview = () => {
+    setShowEndConfirmation(false);
+    endInterview();
+  };
+
+  const cancelEndInterview = () => {
+    setShowEndConfirmation(false);
   };
 
   const loadNextQuestion = async () => {
@@ -417,6 +441,38 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
       <div className="container mx-auto px-4 py-6">
         <div className="max-w-6xl mx-auto">
+          {/* End Interview Confirmation Modal */}
+          {showEndConfirmation && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-2xl p-8 max-w-md mx-4">
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <StopCircle className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">End Interview Early?</h3>
+                  <p className="text-gray-600 mb-6">
+                    You've completed {progress.current - 1} out of {progress.total} questions. 
+                    Are you sure you want to end the interview now? You'll still receive analytics based on your responses.
+                  </p>
+                  <div className="flex space-x-4">
+                    <button
+                      onClick={cancelEndInterview}
+                      className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-xl hover:bg-gray-300 transition-colors"
+                    >
+                      Continue Interview
+                    </button>
+                    <button
+                      onClick={confirmEndInterview}
+                      className="flex-1 px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors"
+                    >
+                      End & Analyze
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Header */}
           <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
@@ -555,7 +611,7 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
                 )}
                 
                 <button
-                  onClick={endInterview}
+                  onClick={handleEndInterviewClick}
                   className="inline-flex items-center px-6 py-3 bg-red-600 text-white font-semibold rounded-xl hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-300 transition-all"
                 >
                   <Square className="w-4 h-4 mr-2" />
@@ -729,6 +785,10 @@ const TextInterviewScreen: React.FC<InterviewScreenProps> = ({
                     <div className="flex justify-between">
                       <span className="text-purple-700">Pre-generation:</span>
                       <span className="text-purple-900 font-medium">Active</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-purple-700">Max Questions:</span>
+                      <span className="text-purple-900 font-medium">{progress.total}</span>
                     </div>
                   </div>
                 </div>
