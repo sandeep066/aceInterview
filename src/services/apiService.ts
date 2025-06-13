@@ -5,7 +5,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3002/api'
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 5000, // Reduced timeout for faster fallback
+  timeout: 120000, // Increase this value to 120 seconds (2 minutes)
   headers: {
     'Content-Type': 'application/json',
   },
