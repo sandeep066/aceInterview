@@ -78,7 +78,29 @@ Generate ONE high-quality question that meets all these criteria.`;
 
   processResponse(response, input, context) {
     try {
-      const result = JSON.parse(response);
+      // Clean the response to remove markdown code block delimiters
+      let cleanedResponse = response.trim();
+      
+      // Remove leading ```json or ``` and trailing ```
+      if (cleanedResponse.startsWith('```json')) {
+        cleanedResponse = cleanedResponse.substring(7);
+        console.log('[QuestionGenerationAgent] Removed leading ```json delimiter');
+      } else if (cleanedResponse.startsWith('```')) {
+        cleanedResponse = cleanedResponse.substring(3);
+        console.log('[QuestionGenerationAgent] Removed leading ``` delimiter');
+      }
+      
+      if (cleanedResponse.endsWith('```')) {
+        cleanedResponse = cleanedResponse.substring(0, cleanedResponse.length - 3);
+        console.log('[QuestionGenerationAgent] Removed trailing ``` delimiter');
+      }
+      
+      // Trim any remaining whitespace
+      cleanedResponse = cleanedResponse.trim();
+      
+      console.log(`[QuestionGenerationAgent] Cleaned response length: ${cleanedResponse.length}`);
+      
+      const result = JSON.parse(cleanedResponse);
       
       // Validate response structure
       if (!result.question || typeof result.question !== 'string') {
@@ -98,8 +120,10 @@ Generate ONE high-quality question that meets all these criteria.`;
       );
       
       if (topicKeywords.length > 0 && !hasRelevantKeywords) {
-        console.warn('Generated question may not be topic-relevant');
+        console.warn('[QuestionGenerationAgent] Generated question may not be topic-relevant');
       }
+      
+      console.log(`[QuestionGenerationAgent] Successfully parsed and validated question: "${result.question.substring(0, 100)}..."`);
       
       return {
         success: true,
@@ -107,12 +131,14 @@ Generate ONE high-quality question that meets all these criteria.`;
         metadata: {
           ...result.metadata,
           topicRelevance: hasRelevantKeywords ? 'high' : 'medium',
-          generatedAt: new Date().toISOString()
+          generatedAt: new Date().toISOString(),
+          cleaningApplied: cleanedResponse !== response.trim()
         },
         reasoning: result.reasoning
       };
     } catch (error) {
-      console.error('Failed to parse generated question:', error);
+      console.error('[QuestionGenerationAgent] Failed to parse generated question:', error);
+      console.error('[QuestionGenerationAgent] Raw response preview:', response.substring(0, 200) + '...');
       
       // Generate fallback question
       return {
@@ -120,7 +146,8 @@ Generate ONE high-quality question that meets all these criteria.`;
         question: this.generateFallbackQuestion(input),
         metadata: {
           fallback: true,
-          generatedAt: new Date().toISOString()
+          generatedAt: new Date().toISOString(),
+          parseError: error.message
         },
         reasoning: 'Fallback question due to parsing error'
       };
@@ -187,6 +214,9 @@ Generate ONE high-quality question that meets all these criteria.`;
     const styleQuestions = fallbackQuestions[config.style] || fallbackQuestions.technical;
     const difficultyQuestions = styleQuestions[questionSpec?.difficulty || 'medium'];
     
-    return difficultyQuestions[Math.floor(Math.random() * difficultyQuestions.length)];
+    const selectedQuestion = difficultyQuestions[Math.floor(Math.random() * difficultyQuestions.length)];
+    console.log(`[QuestionGenerationAgent] Generated fallback question: "${selectedQuestion}"`);
+    
+    return selectedQuestion;
   }
 }
