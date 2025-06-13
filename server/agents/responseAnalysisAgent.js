@@ -67,7 +67,37 @@ Provide specific examples from the response to support your analysis. Focus on a
 
   processResponse(response, input, context) {
     try {
-      const result = JSON.parse(response);
+      // Clean the response to remove markdown code block delimiters
+      let cleanedResponse = response.trim();
+      
+      console.log(`[ResponseAnalysisAgent] Original response length: ${cleanedResponse.length}`);
+      
+      // Remove leading ```json or ``` and trailing ```
+      let cleaningApplied = false;
+      
+      if (cleanedResponse.startsWith('```json')) {
+        cleanedResponse = cleanedResponse.substring(7);
+        cleaningApplied = true;
+        console.log('[ResponseAnalysisAgent] Removed leading ```json delimiter');
+      } else if (cleanedResponse.startsWith('```')) {
+        cleanedResponse = cleanedResponse.substring(3);
+        cleaningApplied = true;
+        console.log('[ResponseAnalysisAgent] Removed leading ``` delimiter');
+      }
+      
+      if (cleanedResponse.endsWith('```')) {
+        cleanedResponse = cleanedResponse.substring(0, cleanedResponse.length - 3);
+        cleaningApplied = true;
+        console.log('[ResponseAnalysisAgent] Removed trailing ``` delimiter');
+      }
+      
+      // Trim any remaining whitespace
+      cleanedResponse = cleanedResponse.trim();
+      
+      console.log(`[ResponseAnalysisAgent] Cleaned response length: ${cleanedResponse.length}`);
+      console.log(`[ResponseAnalysisAgent] Cleaning applied: ${cleaningApplied}`);
+      
+      const result = JSON.parse(cleanedResponse);
       
       // Validate response structure
       if (!result.responseAnalysis || !result.score) {
@@ -89,19 +119,69 @@ Provide specific examples from the response to support your analysis. Focus on a
         result.score = Math.round(Object.values(scores).reduce((sum, score) => sum + score, 0) / scoreFields.length);
       }
       
+      console.log(`[ResponseAnalysisAgent] Successfully parsed response analysis with score: ${result.score}`);
+      
       return {
         success: true,
         analysis: result,
         metadata: {
           analyzedAt: new Date().toISOString(),
           question: input.question,
-          responseLength: input.response.length
+          responseLength: input.response.length,
+          cleaningApplied
         }
       };
     } catch (error) {
-      console.error('Failed to parse response analysis:', error);
+      console.error('[ResponseAnalysisAgent] Failed to parse response analysis:', error);
+      console.error('[ResponseAnalysisAgent] Raw response preview:', response.substring(0, 200) + '...');
+      
+      // Try to extract JSON from the response if it's embedded in text
+      try {
+        console.log('[ResponseAnalysisAgent] Attempting to extract JSON from response...');
+        
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const extractedJson = jsonMatch[0];
+          console.log(`[ResponseAnalysisAgent] Found potential JSON, length: ${extractedJson.length}`);
+          
+          const result = JSON.parse(extractedJson);
+          
+          // Apply same validation as above
+          if (result.responseAnalysis && result.score) {
+            console.log('[ResponseAnalysisAgent] Successfully extracted and parsed JSON from response');
+            
+            // Ensure scores are within valid range
+            const scores = result.responseAnalysis;
+            const scoreFields = ['clarity', 'structure', 'technical', 'communication', 'confidence', 'relevance'];
+            
+            for (const field of scoreFields) {
+              if (typeof scores[field] !== 'number' || scores[field] < 0 || scores[field] > 100) {
+                scores[field] = 70;
+              }
+            }
+            
+            if (typeof result.score !== 'number' || result.score < 0 || result.score > 100) {
+              result.score = Math.round(Object.values(scores).reduce((sum, score) => sum + score, 0) / scoreFields.length);
+            }
+            
+            return {
+              success: true,
+              analysis: result,
+              metadata: {
+                analyzedAt: new Date().toISOString(),
+                question: input.question,
+                responseLength: input.response.length,
+                extractedFromText: true
+              }
+            };
+          }
+        }
+      } catch (extractError) {
+        console.error('[ResponseAnalysisAgent] JSON extraction also failed:', extractError);
+      }
       
       // Generate fallback analysis
+      console.log('[ResponseAnalysisAgent] Using fallback analysis');
       return {
         success: false,
         analysis: this.generateFallbackAnalysis(input),
@@ -109,7 +189,8 @@ Provide specific examples from the response to support your analysis. Focus on a
           analyzedAt: new Date().toISOString(),
           question: input.question,
           responseLength: input.response.length,
-          fallback: true
+          fallback: true,
+          parseError: error.message
         }
       };
     }
@@ -118,6 +199,8 @@ Provide specific examples from the response to support your analysis. Focus on a
   generateFallbackAnalysis(input) {
     const { response, config } = input;
     const responseLength = response.length;
+    
+    console.log('[ResponseAnalysisAgent] Generating fallback analysis');
     
     // Basic scoring based on response characteristics
     const clarity = Math.min(95, Math.max(60, 70 + (responseLength / 50)));

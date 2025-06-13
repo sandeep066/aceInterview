@@ -240,7 +240,27 @@ Return ONLY the question text, no additional formatting or explanation.`;
 
     try {
       const question = await this.makeAPICall(messages, systemPrompt);
-      return question.trim();
+      
+      // Clean the response to remove any markdown formatting
+      let cleanedQuestion = question.trim();
+      
+      // Remove any markdown code block delimiters
+      if (cleanedQuestion.startsWith('```')) {
+        const lines = cleanedQuestion.split('\n');
+        lines.shift(); // Remove first line with ```
+        if (lines[lines.length - 1].trim() === '```') {
+          lines.pop(); // Remove last line with ```
+        }
+        cleanedQuestion = lines.join('\n').trim();
+      }
+      
+      // Remove any quotes if the entire question is wrapped in quotes
+      if ((cleanedQuestion.startsWith('"') && cleanedQuestion.endsWith('"')) ||
+          (cleanedQuestion.startsWith("'") && cleanedQuestion.endsWith("'"))) {
+        cleanedQuestion = cleanedQuestion.slice(1, -1);
+      }
+      
+      return cleanedQuestion;
     } catch (error) {
       console.error('Error generating question:', error);
       // Fallback to predefined questions if LLM fails
@@ -278,7 +298,25 @@ Return ONLY the follow-up question, no additional text.`;
 
     try {
       const followUp = await this.makeAPICall(messages, systemPrompt);
-      return followUp.trim();
+      
+      // Clean the response similar to generateQuestion
+      let cleanedFollowUp = followUp.trim();
+      
+      if (cleanedFollowUp.startsWith('```')) {
+        const lines = cleanedFollowUp.split('\n');
+        lines.shift();
+        if (lines[lines.length - 1].trim() === '```') {
+          lines.pop();
+        }
+        cleanedFollowUp = lines.join('\n').trim();
+      }
+      
+      if ((cleanedFollowUp.startsWith('"') && cleanedFollowUp.endsWith('"')) ||
+          (cleanedFollowUp.startsWith("'") && cleanedFollowUp.endsWith("'"))) {
+        cleanedFollowUp = cleanedFollowUp.slice(1, -1);
+      }
+      
+      return cleanedFollowUp;
     } catch (error) {
       console.error('Error generating follow-up:', error);
       return "Can you elaborate on that point a bit more?";
@@ -319,7 +357,23 @@ Return a JSON object with this structure:
 
     try {
       const analysis = await this.makeAPICall(messages, systemPrompt);
-      return JSON.parse(analysis);
+      
+      // Clean the response to remove markdown code block delimiters
+      let cleanedAnalysis = analysis.trim();
+      
+      if (cleanedAnalysis.startsWith('```json')) {
+        cleanedAnalysis = cleanedAnalysis.substring(7);
+      } else if (cleanedAnalysis.startsWith('```')) {
+        cleanedAnalysis = cleanedAnalysis.substring(3);
+      }
+      
+      if (cleanedAnalysis.endsWith('```')) {
+        cleanedAnalysis = cleanedAnalysis.substring(0, cleanedAnalysis.length - 3);
+      }
+      
+      cleanedAnalysis = cleanedAnalysis.trim();
+      
+      return JSON.parse(cleanedAnalysis);
     } catch (error) {
       console.error('Error analyzing response:', error);
       return {
@@ -403,7 +457,23 @@ Provide comprehensive analytics in this JSON format:
 
     try {
       const analytics = await this.makeAPICall(messages, systemPrompt);
-      return JSON.parse(analytics);
+      
+      // Clean the response to remove markdown code block delimiters
+      let cleanedAnalytics = analytics.trim();
+      
+      if (cleanedAnalytics.startsWith('```json')) {
+        cleanedAnalytics = cleanedAnalytics.substring(7);
+      } else if (cleanedAnalytics.startsWith('```')) {
+        cleanedAnalytics = cleanedAnalytics.substring(3);
+      }
+      
+      if (cleanedAnalytics.endsWith('```')) {
+        cleanedAnalytics = cleanedAnalytics.substring(0, cleanedAnalytics.length - 3);
+      }
+      
+      cleanedAnalytics = cleanedAnalytics.trim();
+      
+      return JSON.parse(cleanedAnalytics);
     } catch (error) {
       console.error('Error generating analytics:', error);
       return this.getFallbackAnalytics(responses);

@@ -55,7 +55,37 @@ Ensure the analysis is specific to the topic and not generic.`;
 
   processResponse(response, input, context) {
     try {
-      const analysis = JSON.parse(response);
+      // Clean the response to remove markdown code block delimiters
+      let cleanedResponse = response.trim();
+      
+      console.log(`[TopicAnalysisAgent] Original response length: ${cleanedResponse.length}`);
+      
+      // Remove leading ```json or ``` and trailing ```
+      let cleaningApplied = false;
+      
+      if (cleanedResponse.startsWith('```json')) {
+        cleanedResponse = cleanedResponse.substring(7);
+        cleaningApplied = true;
+        console.log('[TopicAnalysisAgent] Removed leading ```json delimiter');
+      } else if (cleanedResponse.startsWith('```')) {
+        cleanedResponse = cleanedResponse.substring(3);
+        cleaningApplied = true;
+        console.log('[TopicAnalysisAgent] Removed leading ``` delimiter');
+      }
+      
+      if (cleanedResponse.endsWith('```')) {
+        cleanedResponse = cleanedResponse.substring(0, cleanedResponse.length - 3);
+        cleaningApplied = true;
+        console.log('[TopicAnalysisAgent] Removed trailing ``` delimiter');
+      }
+      
+      // Trim any remaining whitespace
+      cleanedResponse = cleanedResponse.trim();
+      
+      console.log(`[TopicAnalysisAgent] Cleaned response length: ${cleanedResponse.length}`);
+      console.log(`[TopicAnalysisAgent] Cleaning applied: ${cleaningApplied}`);
+      
+      const analysis = JSON.parse(cleanedResponse);
       
       // Validate required fields
       const requiredFields = ['mainConcepts', 'skills', 'focusAreas', 'relevanceKeywords'];
@@ -65,25 +95,70 @@ Ensure the analysis is specific to the topic and not generic.`;
         }
       }
       
+      console.log(`[TopicAnalysisAgent] Successfully parsed topic analysis for: ${input.topic}`);
+      
       return {
         success: true,
         analysis,
         metadata: {
           topic: input.topic,
-          analyzedAt: new Date().toISOString()
+          analyzedAt: new Date().toISOString(),
+          cleaningApplied
         }
       };
     } catch (error) {
-      console.error('Failed to parse topic analysis:', error);
+      console.error('[TopicAnalysisAgent] Failed to parse topic analysis:', error);
+      console.error('[TopicAnalysisAgent] Raw response preview:', response.substring(0, 200) + '...');
+      
+      // Try to extract JSON from the response if it's embedded in text
+      try {
+        console.log('[TopicAnalysisAgent] Attempting to extract JSON from response...');
+        
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const extractedJson = jsonMatch[0];
+          console.log(`[TopicAnalysisAgent] Found potential JSON, length: ${extractedJson.length}`);
+          
+          const analysis = JSON.parse(extractedJson);
+          
+          // Validate required fields
+          const requiredFields = ['mainConcepts', 'skills', 'focusAreas', 'relevanceKeywords'];
+          let validStructure = true;
+          
+          for (const field of requiredFields) {
+            if (!analysis[field] || !Array.isArray(analysis[field])) {
+              validStructure = false;
+              break;
+            }
+          }
+          
+          if (validStructure) {
+            console.log('[TopicAnalysisAgent] Successfully extracted and validated JSON from response');
+            return {
+              success: true,
+              analysis,
+              metadata: {
+                topic: input.topic,
+                analyzedAt: new Date().toISOString(),
+                extractedFromText: true
+              }
+            };
+          }
+        }
+      } catch (extractError) {
+        console.error('[TopicAnalysisAgent] JSON extraction also failed:', extractError);
+      }
       
       // Fallback analysis
+      console.log('[TopicAnalysisAgent] Using fallback analysis');
       return {
         success: false,
         analysis: this.generateFallbackAnalysis(input),
         metadata: {
           topic: input.topic,
           fallback: true,
-          analyzedAt: new Date().toISOString()
+          analyzedAt: new Date().toISOString(),
+          parseError: error.message
         }
       };
     }
@@ -137,6 +212,8 @@ Ensure the analysis is specific to the topic and not generic.`;
         relevanceKeywords: ['code', 'programming', 'development', 'software', 'technical']
       };
     }
+    
+    console.log(`[TopicAnalysisAgent] Generated fallback analysis for topic: ${topic}`);
     
     return {
       ...analysis,
