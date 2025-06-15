@@ -140,7 +140,12 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       // Start voice interview session
       const session = await VoiceInterviewService.startVoiceInterview(config, participantName);
       setVoiceSession(session);
-      setCurrentQuestion(session.firstQuestion || '');
+      
+      // Extract question string from the response object
+      const firstQuestion = typeof session.firstQuestion === 'string' 
+        ? session.firstQuestion 
+        : session.firstQuestion?.question || '';
+      setCurrentQuestion(firstQuestion);
       
       // Connect to LiveKit room
       await connectLiveKit();
@@ -222,7 +227,11 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       if (result.isComplete) {
         endInterview();
       } else if (result.nextQuestion) {
-        setCurrentQuestion(result.nextQuestion.question);
+        // Extract question string from the response object
+        const nextQuestion = typeof result.nextQuestion === 'string'
+          ? result.nextQuestion
+          : result.nextQuestion?.question || '';
+        setCurrentQuestion(nextQuestion);
         resetTranscript();
       }
     } catch (error) {

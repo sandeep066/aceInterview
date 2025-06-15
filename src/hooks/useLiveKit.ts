@@ -55,6 +55,27 @@ export const useLiveKit = ({
   const connectToRoom = useCallback(async () => {
     if (isConnecting || isConnected) return;
 
+    // Validate wsUrl before attempting connection
+    if (!wsUrl || typeof wsUrl !== 'string' || wsUrl.trim() === '') {
+      const errorMessage = 'Invalid or missing WebSocket URL';
+      setError(errorMessage);
+      onError?.(new Error(errorMessage));
+      return;
+    }
+
+    // Check if wsUrl is a valid WebSocket URL
+    try {
+      const url = new URL(wsUrl);
+      if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
+        throw new Error('URL must use ws:// or wss:// protocol');
+      }
+    } catch (err) {
+      const errorMessage = `Invalid WebSocket URL: ${err instanceof Error ? err.message : 'Unknown error'}`;
+      setError(errorMessage);
+      onError?.(new Error(errorMessage));
+      return;
+    }
+
     setIsConnecting(true);
     setError(null);
 

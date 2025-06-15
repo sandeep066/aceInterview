@@ -5,15 +5,30 @@ export class LiveKitService {
   constructor() {
     this.apiKey = process.env.LIVEKIT_API_KEY;
     this.apiSecret = process.env.LIVEKIT_API_SECRET;
-    this.wsUrl = process.env.LIVEKIT_WS_URL ;
+    this.wsUrl = process.env.LIVEKIT_WS_URL;
     
-    if (!this.apiKey || !this.apiSecret) {
-      console.warn('LiveKit credentials not configured. Voice interviews will be disabled.');
+    // Check if wsUrl is a valid URL and not a placeholder
+    if (this.wsUrl && (this.wsUrl.includes('your-livekit-server.com') || !this.isValidWebSocketUrl(this.wsUrl))) {
+      console.warn('LiveKit WebSocket URL is invalid or contains placeholder values. Voice interviews will be disabled.');
+      this.wsUrl = null;
+    }
+    
+    if (!this.apiKey || !this.apiSecret || !this.wsUrl) {
+      console.warn('LiveKit credentials not configured properly. Voice interviews will be disabled.');
+    }
+  }
+
+  isValidWebSocketUrl(url) {
+    try {
+      const urlObj = new URL(url);
+      return urlObj.protocol === 'ws:' || urlObj.protocol === 'wss:';
+    } catch {
+      return false;
     }
   }
 
   isConfigured() {
-    return !!(this.apiKey && this.apiSecret);
+    return !!(this.apiKey && this.apiSecret && this.wsUrl);
   }
 
   /**
