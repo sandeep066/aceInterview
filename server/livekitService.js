@@ -5,7 +5,7 @@ export class LiveKitService {
   constructor() {
     this.apiKey = process.env.LIVEKIT_API_KEY;
     this.apiSecret = process.env.LIVEKIT_API_SECRET;
-    this.wsUrl = process.env.LIVEKIT_WS_URL || 'wss://your-livekit-server.com';
+    this.wsUrl = process.env.LIVEKIT_WS_URL ;
     
     if (!this.apiKey || !this.apiSecret) {
       console.warn('LiveKit credentials not configured. Voice interviews will be disabled.');
