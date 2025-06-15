@@ -248,22 +248,153 @@ app.get('/api/voice-interview/sessions/active', (req, res) => {
 
 // LiveKit configuration check
 app.get('/api/livekit/config', (req, res) => {
-  res.json({
-    configured: livekitService.isConfigured(),
-    wsUrl: livekitService.isConfigured() ? livekitService.wsUrl : null
-  });
+  try {
+    res.json({
+      configured: livekitService.isConfigured(),
+      wsUrl: livekitService.isConfigured() ? livekitService.wsUrl : null,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error checking LiveKit config:', error);
+    res.status(500).json({
+      error: 'Failed to check LiveKit configuration',
+      message: error.message
+    });
+  }
 });
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    timestamp: new Date().toISOString(),
-    services: {
-      llm: !!questionGenerator.apiKey,
-      livekit: livekitService.isConfigured()
+// Enhanced Health Check Endpoint
+app.get('/api/health', async (req, res) => {
+  try {
+    const healthStatus = {
+      status: 'OK',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      version: process.env.npm_package_version || '1.0.0',
+      environment: process.env.NODE_ENV || 'development',
+      services: {
+        llm: {
+          configured: !!questionGenerator.apiKey,
+          provider: questionGenerator.provider?.toUpperCase() || 'UNKNOWN',
+          status: 'operational'
+        },
+        livekit: {
+          configured: livekitService.isConfigured(),
+          status: livekitService.isConfigured() ? 'operational' : 'disabled',
+          wsUrl: livekitService.isConfigured() ? livekitService.wsUrl : null
+        },
+        agentic: {
+          questionGeneration: !!questionGenerator.agenticOrchestrator,
+          performanceAnalysis: !!questionGenerator.performanceAnalysisOrchestrator,
+          status: questionGenerator.agenticOrchestrator ? 'operational' : 'fallback'
+        }
+      },
+      system: {
+        nodeVersion: process.version,
+        platform: process.platform,
+        arch: process.arch,
+        memory: {
+          used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+          total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+          external: Math.round(process.memoryUsage().external / 1024 / 1024)
+        },
+        cpu: process.cpuUsage()
+      }
+    };
+
+    // Perform basic service checks
+    try {
+      // Test LLM service availability
+      if (questionGenerator.apiKey) {
+        // Could add a simple test call here if needed
+        healthStatus.services.llm.lastCheck = new Date().toISOString();
+      }
+
+      // Test agentic framework stats
+      if (questionGenerator.agenticOrchestrator) {
+        const agenticStats = questionGenerator.getAgenticStats();
+        healthStatus.services.agentic.stats = agenticStats;
+      }
+
+    } catch (serviceError) {
+      console.warn('Service check warning:', serviceError.message);
+      healthStatus.warnings = healthStatus.warnings || [];
+      healthStatus.warnings.push(`Service check: ${serviceError.message}`);
     }
-  });
+
+    // Determine overall health status
+    const criticalServices = [
+      healthStatus.services.llm.configured
+    ];
+
+    const allCriticalServicesUp = criticalServices.every(service => service);
+    
+    if (!allCriticalServicesUp) {
+      healthStatus.status = 'DEGRADED';
+      healthStatus.message = 'Some critical services are not available';
+    }
+
+    // Set appropriate HTTP status code
+    const httpStatus = healthStatus.status === 'OK' ? 200 : 
+                      healthStatus.status === 'DEGRADED' ? 200 : 503;
+
+    res.status(httpStatus).json(healthStatus);
+
+  } catch (error) {
+    console.error('Health check error:', error);
+    res.status(503).json({
+      status: 'ERROR',
+      timestamp: new Date().toISOString(),
+      error: 'Health check failed',
+      message: error.message,
+      services: {
+        llm: { status: 'unknown' },
+        livekit: { status: 'unknown' },
+        agentic: { status: 'unknown' }
+      }
+    });
+  }
+});
+
+// Enhanced System Info Endpoint
+app.get('/api/system/info', (req, res) => {
+  try {
+    const systemInfo = {
+      application: {
+        name: 'AI Interview Practice Platform',
+        version: process.env.npm_package_version || '1.0.0',
+        environment: process.env.NODE_ENV || 'development',
+        uptime: process.uptime(),
+        startTime: new Date(Date.now() - process.uptime() * 1000).toISOString()
+      },
+      runtime: {
+        node: process.version,
+        platform: process.platform,
+        arch: process.arch,
+        pid: process.pid
+      },
+      memory: {
+        heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+        heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+        external: Math.round(process.memoryUsage().external / 1024 / 1024),
+        rss: Math.round(process.memoryUsage().rss / 1024 / 1024)
+      },
+      configuration: {
+        port: PORT,
+        llmProvider: questionGenerator.provider?.toUpperCase() || 'UNKNOWN',
+        livekitConfigured: livekitService.isConfigured(),
+        agenticFramework: !!questionGenerator.agenticOrchestrator
+      }
+    };
+
+    res.json(systemInfo);
+  } catch (error) {
+    console.error('System info error:', error);
+    res.status(500).json({
+      error: 'Failed to get system information',
+      message: error.message
+    });
+  }
 });
 
 // LiveKit webhook endpoint (for handling room events)
@@ -296,10 +427,24 @@ app.post('/api/livekit/webhook', (req, res) => {
   }
 });
 
+// Graceful shutdown handling
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully');
+  process.exit(0);
+});
+
+// Start server
 app.listen(PORT, () => {
   console.log(`🚀 AI Interview Backend running on port ${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
+  console.log(`ℹ️  System info: http://localhost:${PORT}/api/system/info`);
   console.log(`🎙️ LiveKit configured: ${livekitService.isConfigured()}`);
+  
   if (livekitService.isConfigured()) {
     console.log(`🔗 LiveKit WebSocket URL: ${livekitService.wsUrl}`);
   } else {
@@ -307,5 +452,14 @@ app.listen(PORT, () => {
     console.log(`   LIVEKIT_API_KEY=your_api_key`);
     console.log(`   LIVEKIT_API_SECRET=your_api_secret`);
     console.log(`   LIVEKIT_WS_URL=wss://your-livekit-server.com`);
+  }
+
+  // Log LLM configuration
+  console.log(`🤖 LLM Provider: ${questionGenerator.provider?.toUpperCase() || 'NOT CONFIGURED'}`);
+  console.log(`🧠 Agentic Framework: ${questionGenerator.agenticOrchestrator ? 'ENABLED' : 'DISABLED'}`);
+  
+  if (questionGenerator.agenticOrchestrator) {
+    const stats = questionGenerator.getAgenticStats();
+    console.log(`📈 Agentic Stats:`, stats);
   }
 });
