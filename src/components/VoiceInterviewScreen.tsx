@@ -58,6 +58,24 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     isSupported: speechSupported
   } = useSpeechRecognition();
 
+  // Only initialize LiveKit hook if we have valid session data
+  const livekitProps = {
+    wsUrl: voiceSession?.wsUrl || '',
+    token: voiceSession?.participantToken || '',
+    onConnected: () => {
+      setConnectionStatus('connected');
+      console.log('[VoiceInterview] Connected to LiveKit room');
+    },
+    onDisconnected: () => {
+      setConnectionStatus('disconnected');
+      console.log('[VoiceInterview] Disconnected from LiveKit room');
+    },
+    onError: (error: Error) => {
+      setConnectionStatus('error');
+      console.error('[VoiceInterview] LiveKit error:', error);
+    }
+  };
+
   const {
     room,
     isConnected: livekitConnected,
@@ -70,22 +88,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     startAudio,
     stopAudio,
     sendDataMessage
-  } = useLiveKit({
-    wsUrl: voiceSession?.wsUrl || '',
-    token: voiceSession?.participantToken || '',
-    onConnected: () => {
-      setConnectionStatus('connected');
-      console.log('Connected to LiveKit room');
-    },
-    onDisconnected: () => {
-      setConnectionStatus('disconnected');
-      console.log('Disconnected from LiveKit room');
-    },
-    onError: (error) => {
-      setConnectionStatus('error');
-      console.error('LiveKit error:', error);
-    }
-  });
+  } = useLiveKit(livekitProps);
 
   const notesRef = useRef<HTMLTextAreaElement>(null);
 
@@ -121,10 +124,11 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       setConnectionStatus('connected');
     } else if (livekitError) {
       setConnectionStatus('error');
-    } else {
+    } else if (voiceSession) {
+      // Only set to disconnected if we have a session but aren't connected
       setConnectionStatus('disconnected');
     }
-  }, [livekitConnecting, livekitConnected, livekitError]);
+  }, [livekitConnecting, livekitConnected, livekitError, voiceSession]);
 
   const formatTime = (ms: number): string => {
     const minutes = Math.floor(ms / 60000);
@@ -137,26 +141,43 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       setIsThinking(true);
       setConnectionStatus('connecting');
       
+      console.log('[VoiceInterview] Starting voice interview session...');
+      
       // Start voice interview session
       const session = await VoiceInterviewService.startVoiceInterview(config, participantName);
+      console.log('[VoiceInterview] Session created:', session);
+      
+      // Validate session data before proceeding
+      if (!session.wsUrl || !session.participantToken) {
+        throw new Error('Invalid session data: missing WebSocket URL or token');
+      }
+      
       setVoiceSession(session);
       
       // Extract question string from the response object
       const firstQuestion = typeof session.firstQuestion === 'string' 
         ? session.firstQuestion 
-        : session.firstQuestion?.question || '';
+        : session.firstQuestion?.question || 'Welcome to your voice interview. Please wait for the first question.';
       setCurrentQuestion(firstQuestion);
       
-      // Connect to LiveKit room
+      console.log('[VoiceInterview] Attempting to connect to LiveKit...');
+      
+      // Connect to LiveKit room - this will now use the validated URLs
       await connectLiveKit();
       
       setIsInterviewActive(true);
       setStartTime(Date.now());
       setIsThinking(false);
+      
+      console.log('[VoiceInterview] Voice interview started successfully');
     } catch (error) {
-      console.error('Error starting voice interview:', error);
+      console.error('[VoiceInterview] Error starting voice interview:', error);
       setConnectionStatus('error');
       setIsThinking(false);
+      
+      // Show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(`Failed to start voice interview: ${errorMessage}`);
     }
   };
 
@@ -169,7 +190,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       try {
         await VoiceInterviewService.pauseInterview(voiceSession.sessionId);
       } catch (error) {
-        console.error('Error pausing interview:', error);
+        console.error('[VoiceInterview] Error pausing interview:', error);
       }
     }
   };
@@ -182,7 +203,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         await VoiceInterviewService.resumeInterview(voiceSession.sessionId);
         await startAudio();
       } catch (error) {
-        console.error('Error resuming interview:', error);
+        console.error('[VoiceInterview] Error resuming interview:', error);
       }
     }
   };
@@ -197,7 +218,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       try {
         await VoiceInterviewService.endInterview(voiceSession.sessionId);
       } catch (error) {
-        console.error('Error ending interview:', error);
+        console.error('[VoiceInterview] Error ending interview:', error);
       }
     }
     
@@ -235,7 +256,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         resetTranscript();
       }
     } catch (error) {
-      console.error('Error submitting voice response:', error);
+      console.error('[VoiceInterview] Error submitting voice response:', error);
     }
     
     setIsThinking(false);
@@ -310,6 +331,22 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Error Display */}
+            {connectionStatus === 'error' && livekitError && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start">
+                  <AlertCircle className="w-5 h-5 text-red-600 mr-3 mt-0.5 flex-shrink-0" />
+                  <div className="text-red-800 text-sm">
+                    <p className="font-medium mb-1">Connection Error</p>
+                    <p className="mb-2">{livekitError}</p>
+                    <p className="text-xs text-red-600">
+                      Please check your LiveKit configuration and try again.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Progress Bar */}
             <div className="mb-4">

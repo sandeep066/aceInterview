@@ -55,9 +55,10 @@ export const useLiveKit = ({
   const connectToRoom = useCallback(async () => {
     if (isConnecting || isConnected) return;
 
-    // Validate wsUrl before attempting connection
+    // Comprehensive URL validation before attempting connection
     if (!wsUrl || typeof wsUrl !== 'string' || wsUrl.trim() === '') {
-      const errorMessage = 'Invalid or missing WebSocket URL';
+      const errorMessage = 'WebSocket URL is missing or empty';
+      console.error('[LiveKit] Connection failed:', errorMessage);
       setError(errorMessage);
       onError?.(new Error(errorMessage));
       return;
@@ -65,12 +66,23 @@ export const useLiveKit = ({
 
     // Check if wsUrl is a valid WebSocket URL
     try {
-      const url = new URL(wsUrl);
+      const url = new URL(wsUrl.trim());
       if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
         throw new Error('URL must use ws:// or wss:// protocol');
       }
-    } catch (err) {
-      const errorMessage = `Invalid WebSocket URL: ${err instanceof Error ? err.message : 'Unknown error'}`;
+      console.log('[LiveKit] Valid WebSocket URL detected:', wsUrl);
+    } catch (urlError) {
+      const errorMessage = `Invalid WebSocket URL format: ${urlError instanceof Error ? urlError.message : 'Unknown URL error'}`;
+      console.error('[LiveKit] URL validation failed:', errorMessage);
+      setError(errorMessage);
+      onError?.(new Error(errorMessage));
+      return;
+    }
+
+    // Validate token
+    if (!token || typeof token !== 'string' || token.trim() === '') {
+      const errorMessage = 'Access token is missing or empty';
+      console.error('[LiveKit] Connection failed:', errorMessage);
       setError(errorMessage);
       onError?.(new Error(errorMessage));
       return;
@@ -94,14 +106,14 @@ export const useLiveKit = ({
 
       // Set up event listeners
       newRoom.on(RoomEvent.Connected, () => {
-        console.log('Connected to LiveKit room');
+        console.log('[LiveKit] Connected to room successfully');
         setIsConnected(true);
         setIsConnecting(false);
         onConnected?.();
       });
 
       newRoom.on(RoomEvent.Disconnected, (reason) => {
-        console.log('Disconnected from LiveKit room:', reason);
+        console.log('[LiveKit] Disconnected from room:', reason);
         setIsConnected(false);
         setIsConnecting(false);
         onDisconnected?.();
@@ -109,7 +121,7 @@ export const useLiveKit = ({
 
       newRoom.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
         if (track.kind === Track.Kind.Audio) {
-          console.log('Audio track subscribed');
+          console.log('[LiveKit] Audio track subscribed');
           setRemoteAudioTracks(prev => [...prev, track as RemoteAudioTrack]);
           
           // Handle audio data if callback provided
@@ -122,7 +134,7 @@ export const useLiveKit = ({
 
       newRoom.on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
         if (track.kind === Track.Kind.Audio) {
-          console.log('Audio track unsubscribed');
+          console.log('[LiveKit] Audio track unsubscribed');
           setRemoteAudioTracks(prev => 
             prev.filter(t => t.sid !== track.sid)
           );
@@ -132,7 +144,7 @@ export const useLiveKit = ({
       newRoom.on(RoomEvent.DataReceived, (payload: Uint8Array, participant) => {
         try {
           const data = JSON.parse(new TextDecoder().decode(payload));
-          console.log('Data received from', participant?.identity, data);
+          console.log('[LiveKit] Data received from', participant?.identity, data);
           
           // Handle different types of data messages
           if (data.type === 'question') {
@@ -141,12 +153,12 @@ export const useLiveKit = ({
             // Handle real-time feedback
           }
         } catch (error) {
-          console.error('Error parsing data message:', error);
+          console.error('[LiveKit] Error parsing data message:', error);
         }
       });
 
       newRoom.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
-        console.log('Connection quality changed:', quality, participant?.identity);
+        console.log('[LiveKit] Connection quality changed:', quality, participant?.identity);
       });
 
       // Connect to the room
@@ -154,13 +166,14 @@ export const useLiveKit = ({
         autoSubscribe: true,
       };
 
-      await newRoom.connect(wsUrl, token, connectOptions);
+      console.log('[LiveKit] Attempting to connect to:', wsUrl);
+      await newRoom.connect(wsUrl.trim(), token.trim(), connectOptions);
       
       setRoom(newRoom);
       roomRef.current = newRoom;
 
     } catch (err) {
-      console.error('Failed to connect to LiveKit room:', err);
+      console.error('[LiveKit] Failed to connect to room:', err);
       const errorMessage = err instanceof Error ? err.message : 'Unknown connection error';
       setError(errorMessage);
       setIsConnecting(false);
@@ -170,6 +183,7 @@ export const useLiveKit = ({
 
   const disconnectFromRoom = useCallback(() => {
     if (roomRef.current) {
+      console.log('[LiveKit] Disconnecting from room');
       roomRef.current.disconnect();
       roomRef.current = null;
       setRoom(null);
@@ -195,9 +209,9 @@ export const useLiveKit = ({
       await room.localParticipant.publishTrack(track);
       
       setLocalAudioTrack(track);
-      console.log('Audio track published');
+      console.log('[LiveKit] Audio track published successfully');
     } catch (err) {
-      console.error('Failed to start audio:', err);
+      console.error('[LiveKit] Failed to start audio:', err);
       setError(err instanceof Error ? err.message : 'Failed to start audio');
     }
   }, [room, localAudioTrack]);
@@ -207,7 +221,7 @@ export const useLiveKit = ({
       localAudioTrack.stop();
       room?.localParticipant.unpublishTrack(localAudioTrack);
       setLocalAudioTrack(null);
-      console.log('Audio track stopped');
+      console.log('[LiveKit] Audio track stopped');
     }
   }, [localAudioTrack, room]);
 
@@ -217,8 +231,9 @@ export const useLiveKit = ({
         const message = JSON.stringify(data);
         const encoder = new TextEncoder();
         room.localParticipant.publishData(encoder.encode(message));
+        console.log('[LiveKit] Data message sent:', data);
       } catch (err) {
-        console.error('Failed to send data message:', err);
+        console.error('[LiveKit] Failed to send data message:', err);
       }
     }
   }, [room, isConnected]);
