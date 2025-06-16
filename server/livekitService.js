@@ -7,9 +7,15 @@ export class LiveKitService {
     this.apiSecret = process.env.LIVEKIT_API_SECRET;
     this.wsUrl = process.env.LIVEKIT_WS_URL;
     
-    // Check if wsUrl is a valid URL and not a placeholder
-    if (this.wsUrl && (this.wsUrl.includes('your-livekit-server.com') || !this.isValidWebSocketUrl(this.wsUrl))) {
-      console.warn('LiveKit WebSocket URL is invalid or contains placeholder values. Voice interviews will be disabled.');
+    // Check if wsUrl contains placeholder values
+    if (this.wsUrl && this.wsUrl.includes('your-livekit-server.com')) {
+      console.warn('LiveKit WebSocket URL contains placeholder values. Voice interviews will be disabled.');
+      this.wsUrl = null;
+    }
+    
+    // Validate WebSocket URL format
+    if (this.wsUrl && !this.isValidWebSocketUrl(this.wsUrl)) {
+      console.warn('LiveKit WebSocket URL format is invalid. Voice interviews will be disabled.');
       this.wsUrl = null;
     }
     
@@ -21,7 +27,9 @@ export class LiveKitService {
   isValidWebSocketUrl(url) {
     try {
       const urlObj = new URL(url);
-      return urlObj.protocol === 'ws:' || urlObj.protocol === 'wss:';
+      return (urlObj.protocol === 'ws:' || urlObj.protocol === 'wss:') && 
+             urlObj.hostname && 
+             urlObj.hostname !== 'your-livekit-server.com';
     } catch {
       return false;
     }
