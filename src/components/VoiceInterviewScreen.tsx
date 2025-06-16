@@ -147,9 +147,17 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       const session = await VoiceInterviewService.startVoiceInterview(config, participantName);
       console.log('[VoiceInterview] Session created:', session);
       
+      // Detailed logging for debugging
+      console.log('[VoiceInterview] Session details:');
+      console.log('- sessionId:', session.sessionId);
+      console.log('- roomName:', session.roomName);
+      console.log('- wsUrl:', typeof session.wsUrl, `"${session.wsUrl}"`);
+      console.log('- participantToken:', session.participantToken ? 'Present' : 'Missing');
+      console.log('- firstQuestion:', session.firstQuestion);
+      
       // Validate session data before proceeding
       if (!session.wsUrl || !session.participantToken) {
-        throw new Error('Invalid session data: missing WebSocket URL or token');
+        throw new Error(`Invalid session data: wsUrl=${session.wsUrl}, token=${session.participantToken ? 'present' : 'missing'}`);
       }
       
       setVoiceSession(session);
@@ -161,6 +169,8 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       setCurrentQuestion(firstQuestion);
       
       console.log('[VoiceInterview] Attempting to connect to LiveKit...');
+      console.log('[VoiceInterview] Will use wsUrl:', `"${session.wsUrl}"`);
+      console.log('[VoiceInterview] Will use token length:', session.participantToken.length);
       
       // Connect to LiveKit room - this will now use the validated URLs
       await connectLiveKit();
@@ -172,6 +182,12 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       console.log('[VoiceInterview] Voice interview started successfully');
     } catch (error) {
       console.error('[VoiceInterview] Error starting voice interview:', error);
+      console.error('[VoiceInterview] Error details:', {
+        name: error instanceof Error ? error.name : 'Unknown',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : 'No stack trace'
+      });
+      
       setConnectionStatus('error');
       setIsThinking(false);
       
@@ -565,6 +581,15 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                       {remoteAudioTracks.length} tracks
                     </span>
                   </div>
+                  {voiceSession && (
+                    <div className="mt-3 pt-2 border-t border-blue-200">
+                      <div className="text-xs text-blue-600">
+                        <div>Session: {voiceSession.sessionId}</div>
+                        <div>Room: {voiceSession.roomName}</div>
+                        <div>URL: {voiceSession.wsUrl}</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

@@ -55,9 +55,14 @@ export const useLiveKit = ({
   const connectToRoom = useCallback(async () => {
     if (isConnecting || isConnected) return;
 
+    // Detailed logging for debugging
+    console.log('[LiveKit] Connection attempt started');
+    console.log('[LiveKit] Received wsUrl:', typeof wsUrl, `"${wsUrl}"`);
+    console.log('[LiveKit] Received token:', typeof token, token ? 'Present' : 'Missing');
+
     // Comprehensive URL validation before attempting connection
     if (!wsUrl || typeof wsUrl !== 'string' || wsUrl.trim() === '') {
-      const errorMessage = 'WebSocket URL is missing or empty Amit text'  ;
+      const errorMessage = `WebSocket URL is missing or empty. Received: ${typeof wsUrl} "${wsUrl}"`;
       console.error('[LiveKit] Connection failed:', errorMessage);
       setError(errorMessage);
       onError?.(new Error(errorMessage));
@@ -66,13 +71,23 @@ export const useLiveKit = ({
 
     // Check if wsUrl is a valid WebSocket URL
     try {
-      const url = new URL(wsUrl.trim());
+      const cleanedUrl = wsUrl.trim();
+      console.log('[LiveKit] Cleaned URL:', `"${cleanedUrl}"`);
+      
+      const url = new URL(cleanedUrl);
+      console.log('[LiveKit] Parsed URL components:', {
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port,
+        pathname: url.pathname
+      });
+      
       if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
         throw new Error('URL must use ws:// or wss:// protocol');
       }
-      console.log('[LiveKit] Valid WebSocket URL detected:', wsUrl);
+      console.log('[LiveKit] Valid WebSocket URL detected:', cleanedUrl);
     } catch (urlError) {
-      const errorMessage = `Invalid WebSocket URL format: ${wsUrl}`;
+      const errorMessage = `Invalid WebSocket URL format. URL: "${wsUrl}", Error: ${urlError instanceof Error ? urlError.message : 'Unknown URL error'}`;
       console.error('[LiveKit] URL validation failed:', errorMessage);
       setError(errorMessage);
       onError?.(new Error(errorMessage));
@@ -81,7 +96,7 @@ export const useLiveKit = ({
 
     // Validate token
     if (!token || typeof token !== 'string' || token.trim() === '') {
-      const errorMessage = 'Access token is missing or empty';
+      const errorMessage = `Access token is missing or empty. Received: ${typeof token} "${token}"`;
       console.error('[LiveKit] Connection failed:', errorMessage);
       setError(errorMessage);
       onError?.(new Error(errorMessage));
@@ -166,14 +181,27 @@ export const useLiveKit = ({
         autoSubscribe: true,
       };
 
-      console.log('[LiveKit] Attempting to connect to:', wsUrl);
-      await newRoom.connect(wsUrl.trim(), token.trim(), connectOptions);
+      const finalUrl = wsUrl.trim();
+      const finalToken = token.trim();
+      
+      console.log('[LiveKit] Attempting to connect with:');
+      console.log('- URL:', `"${finalUrl}"`);
+      console.log('- Token length:', finalToken.length);
+      console.log('- Token preview:', finalToken.substring(0, 20) + '...');
+      
+      await newRoom.connect(finalUrl, finalToken, connectOptions);
       
       setRoom(newRoom);
       roomRef.current = newRoom;
 
     } catch (err) {
       console.error('[LiveKit] Failed to connect to room:', err);
+      console.error('[LiveKit] Error details:', {
+        name: err instanceof Error ? err.name : 'Unknown',
+        message: err instanceof Error ? err.message : 'Unknown error',
+        stack: err instanceof Error ? err.stack : 'No stack trace'
+      });
+      
       const errorMessage = err instanceof Error ? err.message : 'Unknown connection error';
       setError(errorMessage);
       setIsConnecting(false);
