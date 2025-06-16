@@ -48,6 +48,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [audioLevel, setAudioLevel] = useState(0);
   const [participantName] = useState(`participant-${Date.now()}`);
+  const [livekitReady, setLivekitReady] = useState(false);
   
   const {
     isListening,
@@ -58,20 +59,8 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     isSupported: speechSupported
   } = useSpeechRecognition();
 
-  // Only initialize LiveKit hook if we have valid session data
-  const shouldUseLiveKit = voiceSession && voiceSession.wsUrl && voiceSession.participantToken;
-  
-  console.log('[VoiceInterview] ========== COMPONENT STATE ==========');
-  console.log('[VoiceInterview] voiceSession:', voiceSession);
-  console.log('[VoiceInterview] shouldUseLiveKit:', shouldUseLiveKit);
-  if (voiceSession) {
-    console.log('[VoiceInterview] voiceSession.wsUrl:', `"${voiceSession.wsUrl}"`);
-    console.log('[VoiceInterview] voiceSession.wsUrl type:', typeof voiceSession.wsUrl);
-    console.log('[VoiceInterview] voiceSession.wsUrl length:', voiceSession.wsUrl?.length || 0);
-    console.log('[VoiceInterview] voiceSession.participantToken length:', voiceSession.participantToken?.length || 0);
-  }
-
-  const livekitProps = shouldUseLiveKit ? {
+  // Only create LiveKit props when we have a valid session
+  const livekitProps = voiceSession && voiceSession.wsUrl && voiceSession.participantToken ? {
     wsUrl: voiceSession.wsUrl,
     token: voiceSession.participantToken,
     onConnected: () => {
@@ -86,21 +75,16 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       setConnectionStatus('error');
       console.error('[VoiceInterview] ❌ LiveKit error:', error);
     }
-  } : {
-    wsUrl: '',
-    token: '',
-    onConnected: () => {},
-    onDisconnected: () => {},
-    onError: () => {}
-  };
+  } : null;
 
-  console.log('[VoiceInterview] LiveKit props being passed:', {
-    wsUrl: livekitProps.wsUrl,
-    wsUrlType: typeof livekitProps.wsUrl,
-    wsUrlLength: livekitProps.wsUrl?.length || 0,
-    tokenLength: livekitProps.token?.length || 0
+  console.log('[VoiceInterview] Component render state:', {
+    hasVoiceSession: !!voiceSession,
+    hasLivekitProps: !!livekitProps,
+    livekitReady,
+    connectionStatus
   });
 
+  // Only initialize LiveKit hook when we have valid props
   const {
     room,
     isConnected: livekitConnected,
@@ -113,7 +97,13 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     startAudio,
     stopAudio,
     sendDataMessage
-  } = useLiveKit(livekitProps);
+  } = useLiveKit(livekitProps || {
+    wsUrl: '',
+    token: '',
+    onConnected: () => {},
+    onDisconnected: () => {},
+    onError: () => {}
+  });
 
   const notesRef = useRef<HTMLTextAreaElement>(null);
 
@@ -143,8 +133,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
 
   // Update connection status based on LiveKit state
   useEffect(() => {
-    if (!shouldUseLiveKit) {
-      // Don't update connection status if we're not using LiveKit
+    if (!livekitProps) {
       return;
     }
     
@@ -155,10 +144,39 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     } else if (livekitError) {
       setConnectionStatus('error');
     } else if (voiceSession) {
-      // Only set to disconnected if we have a session but aren't connected
       setConnectionStatus('disconnected');
     }
-  }, [livekitConnecting, livekitConnected, livekitError, voiceSession, shouldUseLiveKit]);
+  }, [livekitConnecting, livekitConnected, livekitError, voiceSession, livekitProps]);
+
+  // Effect to handle LiveKit connection after session is set
+  useEffect(() => {
+    if (voiceSession && voiceSession.wsUrl && voiceSession.participantToken && !livekitReady) {
+      console.log('[VoiceInterview] Session ready, preparing LiveKit connection');
+      setLivekitReady(true);
+      
+      // Small delay to ensure state is fully updated
+      setTimeout(async () => {
+        try {
+          console.log('[VoiceInterview] ========== ATTEMPTING LIVEKIT CONNECTION ==========');
+          console.log('[VoiceInterview] Session wsUrl:', `"${voiceSession.wsUrl}"`);
+          console.log('[VoiceInterview] Session token length:', voiceSession.participantToken?.length || 0);
+          
+          await connectLiveKit();
+          
+          setIsInterviewActive(true);
+          setStartTime(Date.now());
+          setIsThinking(false);
+          
+          console.log('[VoiceInterview] ✅ Voice interview started successfully');
+        } catch (connectError) {
+          console.error('[VoiceInterview] ❌ Failed to connect to LiveKit:', connectError);
+          setConnectionStatus('error');
+          setIsThinking(false);
+          alert(`Failed to connect to voice interview: ${connectError instanceof Error ? connectError.message : 'Unknown error'}`);
+        }
+      }, 200);
+    }
+  }, [voiceSession, livekitReady, connectLiveKit]);
 
   const formatTime = (ms: number): string => {
     const minutes = Math.floor(ms / 60000);
@@ -184,7 +202,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       console.log('- wsUrl type:', typeof session.wsUrl);
       console.log('- wsUrl value:', `"${session.wsUrl}"`);
       console.log('- wsUrl length:', session.wsUrl?.length || 0);
-      console.log('- wsUrl char codes:', session.wsUrl ? Array.from(session.wsUrl).map(c => c.charCodeAt(0)).join(',') : 'N/A');
       console.log('- participantToken:', session.participantToken ? 'Present' : 'Missing');
       console.log('- participantToken length:', session.participantToken?.length || 0);
       console.log('- firstQuestion:', session.firstQuestion);
@@ -199,7 +216,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       }
       
       console.log('[VoiceInterview] ✅ Session validation passed, setting voiceSession state');
-      setVoiceSession(session);
       
       // Extract question string from the response object
       const firstQuestion = typeof session.firstQuestion === 'string' 
@@ -207,30 +223,8 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         : session.firstQuestion?.question || 'Welcome to your voice interview. Please wait for the first question.';
       setCurrentQuestion(firstQuestion);
       
-      console.log('[VoiceInterview] ✅ State updated, will attempt LiveKit connection after state update');
-      
-      // Wait a moment for the state to update before connecting
-      setTimeout(async () => {
-        try {
-          console.log('[VoiceInterview] ========== ATTEMPTING LIVEKIT CONNECTION ==========');
-          console.log('[VoiceInterview] Current voiceSession state:', voiceSession);
-          console.log('[VoiceInterview] Current shouldUseLiveKit:', shouldUseLiveKit);
-          
-          // Connect to LiveKit room - this will now use the validated URLs
-          await connectLiveKit();
-          
-          setIsInterviewActive(true);
-          setStartTime(Date.now());
-          setIsThinking(false);
-          
-          console.log('[VoiceInterview] ✅ Voice interview started successfully');
-        } catch (connectError) {
-          console.error('[VoiceInterview] ❌ Failed to connect to LiveKit:', connectError);
-          setConnectionStatus('error');
-          setIsThinking(false);
-          alert(`Failed to connect to voice interview: ${connectError instanceof Error ? connectError.message : 'Unknown error'}`);
-        }
-      }, 100);
+      // Set the session - this will trigger the useEffect above to connect to LiveKit
+      setVoiceSession(session);
       
     } catch (error) {
       console.error('[VoiceInterview] ❌ Error starting voice interview:', error);
@@ -252,7 +246,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   const pauseInterview = async () => {
     setIsInterviewActive(false);
     stopListening();
-    if (shouldUseLiveKit) {
+    if (livekitProps) {
       stopAudio();
     }
     
@@ -271,7 +265,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     if (voiceSession) {
       try {
         await VoiceInterviewService.resumeInterview(voiceSession.sessionId);
-        if (shouldUseLiveKit) {
+        if (livekitProps) {
           await startAudio();
         }
       } catch (error) {
@@ -283,7 +277,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   const endInterview = async () => {
     setIsInterviewActive(false);
     stopListening();
-    if (shouldUseLiveKit) {
+    if (livekitProps) {
       stopAudio();
       disconnectLiveKit();
     }
@@ -339,11 +333,11 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   const toggleMicrophone = async () => {
     if (isListening) {
       stopListening();
-      if (shouldUseLiveKit) {
+      if (livekitProps) {
         stopAudio();
       }
     } else {
-      if (shouldUseLiveKit) {
+      if (livekitProps) {
         await startAudio();
       }
       startListening();
@@ -644,9 +638,15 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-blue-700">Should Use LiveKit:</span>
-                    <span className={shouldUseLiveKit ? 'text-green-600' : 'text-red-600'}>
-                      {shouldUseLiveKit ? 'Yes' : 'No'}
+                    <span className="text-blue-700">LiveKit Ready:</span>
+                    <span className={livekitReady ? 'text-green-600' : 'text-red-600'}>
+                      {livekitReady ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-blue-700">Has Props:</span>
+                    <span className={livekitProps ? 'text-green-600' : 'text-red-600'}>
+                      {livekitProps ? 'Yes' : 'No'}
                     </span>
                   </div>
                   {voiceSession && (
