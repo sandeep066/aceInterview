@@ -103,22 +103,65 @@ app.post('/api/generate-analytics', async (req, res) => {
 // New LiveKit voice interview routes
 app.post('/api/voice-interview/start', async (req, res) => {
   try {
+    console.log('[API] Voice interview start request received');
+    console.log('[API] Request body:', JSON.stringify(req.body, null, 2));
+    
     const { config, participantName } = req.body;
     
-    if (!livekitService.isConfigured()) {
-      return res.status(503).json({
-        error: 'Voice interviews not available',
-        message: 'LiveKit is not configured. Please check your environment variables.'
+    // Validate request body
+    if (!config) {
+      console.error('[API] Missing config in request body');
+      return res.status(400).json({
+        error: 'Missing configuration',
+        message: 'Interview configuration is required'
       });
     }
     
+    if (!participantName) {
+      console.error('[API] Missing participantName in request body');
+      return res.status(400).json({
+        error: 'Missing participant name',
+        message: 'Participant name is required'
+      });
+    }
+    
+    // Check LiveKit configuration
+    console.log('[API] Checking LiveKit configuration...');
+    if (!livekitService.isConfigured()) {
+      console.error('[API] LiveKit not configured');
+      return res.status(503).json({
+        error: 'Voice interviews not available',
+        message: 'LiveKit is not configured. Please check your environment variables.',
+        details: {
+          hasApiKey: !!process.env.LIVEKIT_API_KEY,
+          hasApiSecret: !!process.env.LIVEKIT_API_SECRET,
+          hasWsUrl: !!process.env.LIVEKIT_WS_URL
+        }
+      });
+    }
+    
+    console.log('[API] LiveKit is configured, starting voice interview...');
     const interviewData = await voiceInterviewService.startVoiceInterview(config, participantName);
+    
+    console.log('[API] Voice interview started successfully');
+    console.log('[API] Response data keys:', Object.keys(interviewData));
+    console.log('[API] Response wsUrl type:', typeof interviewData.wsUrl);
+    console.log('[API] Response wsUrl value:', `"${interviewData.wsUrl}"`);
+    
     res.json(interviewData);
   } catch (error) {
-    console.error('Error starting voice interview:', error);
+    console.error('[API] Error starting voice interview:', error);
+    console.error('[API] Error stack:', error.stack);
+    console.error('[API] Error name:', error.name);
+    console.error('[API] Error message:', error.message);
+    
     res.status(500).json({
       error: 'Failed to start voice interview',
-      message: error.message
+      message: error.message,
+      details: {
+        errorName: error.name,
+        timestamp: new Date().toISOString()
+      }
     });
   }
 });
@@ -249,13 +292,31 @@ app.get('/api/voice-interview/sessions/active', (req, res) => {
 // LiveKit configuration check
 app.get('/api/livekit/config', (req, res) => {
   try {
+    console.log('[API] LiveKit config check requested');
+    console.log('[API] Environment variables:');
+    console.log('- LIVEKIT_API_KEY:', process.env.LIVEKIT_API_KEY ? 'Set' : 'Not set');
+    console.log('- LIVEKIT_API_SECRET:', process.env.LIVEKIT_API_SECRET ? 'Set' : 'Not set');
+    console.log('- LIVEKIT_WS_URL:', process.env.LIVEKIT_WS_URL ? `"${process.env.LIVEKIT_WS_URL}"` : 'Not set');
+    
+    const configured = livekitService.isConfigured();
+    const wsUrl = livekitService.getWebSocketUrl();
+    
+    console.log('[API] LiveKit configured:', configured);
+    console.log('[API] LiveKit wsUrl:', `"${wsUrl}"`);
+    
     res.json({
-      configured: livekitService.isConfigured(),
-      wsUrl: livekitService.isConfigured() ? livekitService.wsUrl : null,
-      timestamp: new Date().toISOString()
+      configured,
+      wsUrl: configured ? wsUrl : null,
+      timestamp: new Date().toISOString(),
+      debug: {
+        hasApiKey: !!process.env.LIVEKIT_API_KEY,
+        hasApiSecret: !!process.env.LIVEKIT_API_SECRET,
+        hasWsUrl: !!process.env.LIVEKIT_WS_URL,
+        rawWsUrl: process.env.LIVEKIT_WS_URL
+      }
     });
   } catch (error) {
-    console.error('Error checking LiveKit config:', error);
+    console.error('[API] Error checking LiveKit config:', error);
     res.status(500).json({
       error: 'Failed to check LiveKit configuration',
       message: error.message
