@@ -12,20 +12,24 @@ export class LiveKitService {
     console.log('- API_SECRET:', this.apiSecret ? 'Set' : 'Not set');
     console.log('- WS_URL:', this.wsUrl ? `"${this.wsUrl}"` : 'Not set');
     
-    // Check if wsUrl contains placeholder values
-    if (this.wsUrl && this.wsUrl.includes('your-livekit-server.com')) {
-      console.warn('LiveKit WebSocket URL contains placeholder values. Voice interviews will be disabled.');
-      this.wsUrl = null;
-    }
-    
-    // Validate WebSocket URL format with improved error handling
-    if (this.wsUrl && !this.isValidWebSocketUrl(this.wsUrl)) {
-      console.warn('LiveKit WebSocket URL format is invalid. Voice interviews will be disabled.');
-      this.wsUrl = null;
+    // Clean and validate the WebSocket URL
+    if (this.wsUrl) {
+      this.wsUrl = this.wsUrl.trim().replace(/['"]/g, '');
+      
+      // Check if wsUrl contains placeholder values
+      if (this.wsUrl.includes('your-livekit-server.com')) {
+        console.warn('LiveKit WebSocket URL contains placeholder values. Voice interviews will be disabled.');
+        this.wsUrl = null;
+      } else if (!this.isValidWebSocketUrl(this.wsUrl)) {
+        console.warn('LiveKit WebSocket URL format is invalid. Voice interviews will be disabled.');
+        this.wsUrl = null;
+      }
     }
     
     if (!this.apiKey || !this.apiSecret || !this.wsUrl) {
       console.warn('LiveKit credentials not configured properly. Voice interviews will be disabled.');
+    } else {
+      console.log('LiveKit service initialized successfully');
     }
   }
 
@@ -57,35 +61,13 @@ export class LiveKitService {
         return false;
       }
       
-      // More lenient URL parsing - handle edge cases
+      // Parse URL to validate format
       let urlObj;
       try {
-        // Try direct URL parsing first
         urlObj = new URL(trimmedUrl);
-      } catch (directError) {
-        console.warn('Direct URL parsing failed:', directError.message);
-        
-        // Try to fix common issues
-        let fixedUrl = trimmedUrl;
-        
-        // Remove any extra quotes or spaces
-        fixedUrl = fixedUrl.replace(/['"]/g, '').trim();
-        
-        // Ensure proper protocol format
-        if (fixedUrl.startsWith('ws:') && !fixedUrl.startsWith('ws://')) {
-          fixedUrl = fixedUrl.replace('ws:', 'ws://');
-        }
-        if (fixedUrl.startsWith('wss:') && !fixedUrl.startsWith('wss://')) {
-          fixedUrl = fixedUrl.replace('wss:', 'wss://');
-        }
-        
-        try {
-          urlObj = new URL(fixedUrl);
-          console.log('URL parsing succeeded after fixing:', fixedUrl);
-        } catch (fixedError) {
-          console.warn('URL parsing failed even after fixing:', fixedError.message);
-          return false;
-        }
+      } catch (parseError) {
+        console.warn('URL parsing failed:', parseError.message);
+        return false;
       }
       
       // Validate protocol
@@ -115,7 +97,18 @@ export class LiveKitService {
   }
 
   isConfigured() {
-    return !!(this.apiKey && this.apiSecret && this.wsUrl);
+    const configured = !!(this.apiKey && this.apiSecret && this.wsUrl);
+    console.log('LiveKit configuration check:', {
+      apiKey: !!this.apiKey,
+      apiSecret: !!this.apiSecret,
+      wsUrl: !!this.wsUrl,
+      configured
+    });
+    return configured;
+  }
+
+  getWebSocketUrl() {
+    return this.wsUrl;
   }
 
   /**
