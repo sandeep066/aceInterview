@@ -13,7 +13,7 @@ export class LiveKitService {
       this.wsUrl = null;
     }
     
-    // Validate WebSocket URL format
+    // Validate WebSocket URL format with improved error handling
     if (this.wsUrl && !this.isValidWebSocketUrl(this.wsUrl)) {
       console.warn('LiveKit WebSocket URL format is invalid. Voice interviews will be disabled.');
       this.wsUrl = null;
@@ -26,11 +26,53 @@ export class LiveKitService {
 
   isValidWebSocketUrl(url) {
     try {
-      const urlObj = new URL(url);
-      return (urlObj.protocol === 'ws:' || urlObj.protocol === 'wss:') && 
-             urlObj.hostname && 
-             urlObj.hostname !== 'your-livekit-server.com';
-    } catch {
+      // Basic string validation first
+      if (!url || typeof url !== 'string' || url.trim() === '') {
+        return false;
+      }
+      
+      const trimmedUrl = url.trim();
+      
+      // Check for placeholder values
+      if (trimmedUrl.includes('your-livekit-server.com')) {
+        return false;
+      }
+      
+      // Check if it starts with ws:// or wss://
+      if (!trimmedUrl.startsWith('ws://') && !trimmedUrl.startsWith('wss://')) {
+        return false;
+      }
+      
+      // Try to parse as URL with better error handling
+      let urlObj;
+      try {
+        urlObj = new URL(trimmedUrl);
+      } catch (urlError) {
+        console.warn('Failed to parse WebSocket URL:', urlError.message);
+        return false;
+      }
+      
+      // Validate protocol
+      if (urlObj.protocol !== 'ws:' && urlObj.protocol !== 'wss:') {
+        return false;
+      }
+      
+      // Validate hostname exists and is not placeholder
+      if (!urlObj.hostname || urlObj.hostname === 'your-livekit-server.com') {
+        return false;
+      }
+      
+      // Additional validation for LiveKit Cloud URLs
+      if (urlObj.hostname.includes('livekit.cloud')) {
+        // LiveKit Cloud URLs should be valid
+        return true;
+      }
+      
+      // For other URLs, ensure they have a valid hostname
+      return urlObj.hostname.length > 0 && urlObj.hostname !== 'localhost' || urlObj.hostname === 'localhost';
+      
+    } catch (error) {
+      console.warn('Error validating WebSocket URL:', error.message);
       return false;
     }
   }
