@@ -65,6 +65,7 @@ export const useLiveKit = ({
     //}
 
     // Check if wsUrl is a valid WebSocket URL
+    this.wsUrl = process.env.LIVEKIT_WS_URL;
     try {
       const url = new URL(wsUrl.trim());
       if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
