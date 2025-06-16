@@ -55,7 +55,6 @@ export const useLiveKit = ({
   const connectToRoom = useCallback(async () => {
     if (isConnecting || isConnected) return;
 
-    wsUrl=LIVEKIT_WS_URL;
     // Comprehensive URL validation before attempting connection
     if (!wsUrl || typeof wsUrl !== 'string' || wsUrl.trim() === '') {
       const errorMessage = 'WebSocket URL is missing or empty';
