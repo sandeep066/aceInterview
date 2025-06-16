@@ -61,27 +61,30 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   // Only initialize LiveKit hook if we have valid session data
   const shouldUseLiveKit = voiceSession && voiceSession.wsUrl && voiceSession.participantToken;
   
-  console.log('[VoiceInterview] LiveKit hook decision:', {
-    hasVoiceSession: !!voiceSession,
-    hasWsUrl: !!(voiceSession?.wsUrl),
-    hasToken: !!(voiceSession?.participantToken),
-    shouldUseLiveKit
-  });
+  console.log('[VoiceInterview] ========== COMPONENT STATE ==========');
+  console.log('[VoiceInterview] voiceSession:', voiceSession);
+  console.log('[VoiceInterview] shouldUseLiveKit:', shouldUseLiveKit);
+  if (voiceSession) {
+    console.log('[VoiceInterview] voiceSession.wsUrl:', `"${voiceSession.wsUrl}"`);
+    console.log('[VoiceInterview] voiceSession.wsUrl type:', typeof voiceSession.wsUrl);
+    console.log('[VoiceInterview] voiceSession.wsUrl length:', voiceSession.wsUrl?.length || 0);
+    console.log('[VoiceInterview] voiceSession.participantToken length:', voiceSession.participantToken?.length || 0);
+  }
 
   const livekitProps = shouldUseLiveKit ? {
     wsUrl: voiceSession.wsUrl,
     token: voiceSession.participantToken,
     onConnected: () => {
       setConnectionStatus('connected');
-      console.log('[VoiceInterview] Connected to LiveKit room');
+      console.log('[VoiceInterview] ✅ Connected to LiveKit room');
     },
     onDisconnected: () => {
       setConnectionStatus('disconnected');
-      console.log('[VoiceInterview] Disconnected from LiveKit room');
+      console.log('[VoiceInterview] ❌ Disconnected from LiveKit room');
     },
     onError: (error: Error) => {
       setConnectionStatus('error');
-      console.error('[VoiceInterview] LiveKit error:', error);
+      console.error('[VoiceInterview] ❌ LiveKit error:', error);
     }
   } : {
     wsUrl: '',
@@ -90,6 +93,13 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     onDisconnected: () => {},
     onError: () => {}
   };
+
+  console.log('[VoiceInterview] LiveKit props being passed:', {
+    wsUrl: livekitProps.wsUrl,
+    wsUrlType: typeof livekitProps.wsUrl,
+    wsUrlLength: livekitProps.wsUrl?.length || 0,
+    tokenLength: livekitProps.token?.length || 0
+  });
 
   const {
     room,
@@ -161,7 +171,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       setIsThinking(true);
       setConnectionStatus('connecting');
       
-      console.log('[VoiceInterview] Starting voice interview session...');
+      console.log('[VoiceInterview] ========== STARTING VOICE INTERVIEW ==========');
       
       // Start voice interview session
       const session = await VoiceInterviewService.startVoiceInterview(config, participantName);
@@ -174,7 +184,9 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       console.log('- wsUrl type:', typeof session.wsUrl);
       console.log('- wsUrl value:', `"${session.wsUrl}"`);
       console.log('- wsUrl length:', session.wsUrl?.length || 0);
+      console.log('- wsUrl char codes:', session.wsUrl ? Array.from(session.wsUrl).map(c => c.charCodeAt(0)).join(',') : 'N/A');
       console.log('- participantToken:', session.participantToken ? 'Present' : 'Missing');
+      console.log('- participantToken length:', session.participantToken?.length || 0);
       console.log('- firstQuestion:', session.firstQuestion);
       
       // Validate session data before proceeding
@@ -186,6 +198,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         throw new Error('No participant token received from backend');
       }
       
+      console.log('[VoiceInterview] ✅ Session validation passed, setting voiceSession state');
       setVoiceSession(session);
       
       // Extract question string from the response object
@@ -194,13 +207,15 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         : session.firstQuestion?.question || 'Welcome to your voice interview. Please wait for the first question.';
       setCurrentQuestion(firstQuestion);
       
-      console.log('[VoiceInterview] About to connect to LiveKit with:');
-      console.log('- wsUrl:', `"${session.wsUrl}"`);
-      console.log('- token length:', session.participantToken.length);
+      console.log('[VoiceInterview] ✅ State updated, will attempt LiveKit connection after state update');
       
       // Wait a moment for the state to update before connecting
       setTimeout(async () => {
         try {
+          console.log('[VoiceInterview] ========== ATTEMPTING LIVEKIT CONNECTION ==========');
+          console.log('[VoiceInterview] Current voiceSession state:', voiceSession);
+          console.log('[VoiceInterview] Current shouldUseLiveKit:', shouldUseLiveKit);
+          
           // Connect to LiveKit room - this will now use the validated URLs
           await connectLiveKit();
           
@@ -208,9 +223,9 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
           setStartTime(Date.now());
           setIsThinking(false);
           
-          console.log('[VoiceInterview] Voice interview started successfully');
+          console.log('[VoiceInterview] ✅ Voice interview started successfully');
         } catch (connectError) {
-          console.error('[VoiceInterview] Failed to connect to LiveKit:', connectError);
+          console.error('[VoiceInterview] ❌ Failed to connect to LiveKit:', connectError);
           setConnectionStatus('error');
           setIsThinking(false);
           alert(`Failed to connect to voice interview: ${connectError instanceof Error ? connectError.message : 'Unknown error'}`);
@@ -218,7 +233,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       }, 100);
       
     } catch (error) {
-      console.error('[VoiceInterview] Error starting voice interview:', error);
+      console.error('[VoiceInterview] ❌ Error starting voice interview:', error);
       console.error('[VoiceInterview] Error details:', {
         name: error instanceof Error ? error.name : 'Unknown',
         message: error instanceof Error ? error.message : 'Unknown error',

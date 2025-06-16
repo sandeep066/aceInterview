@@ -53,60 +53,80 @@ export const useLiveKit = ({
   const roomRef = useRef<Room | null>(null);
 
   const connectToRoom = useCallback(async () => {
-    if (isConnecting || isConnected) return;
+    console.log('[LiveKit] ========== CONNECTION ATTEMPT START ==========');
+    console.log('[LiveKit] Hook called with props:');
+    console.log('- wsUrl type:', typeof wsUrl);
+    console.log('- wsUrl value:', `"${wsUrl}"`);
+    console.log('- wsUrl length:', wsUrl?.length || 0);
+    console.log('- wsUrl char codes:', wsUrl ? Array.from(wsUrl).map(c => c.charCodeAt(0)).join(',') : 'N/A');
+    console.log('- token type:', typeof token);
+    console.log('- token length:', token?.length || 0);
+    console.log('- isConnecting:', isConnecting);
+    console.log('- isConnected:', isConnected);
 
-    // Detailed logging for debugging
-    console.log('[LiveKit] Connection attempt started');
-    console.log('[LiveKit] Received wsUrl:', typeof wsUrl, `"${wsUrl}"`);
-    console.log('[LiveKit] Received token:', typeof token, token ? 'Present' : 'Missing');
+    if (isConnecting || isConnected) {
+      console.log('[LiveKit] Already connecting or connected, skipping');
+      return;
+    }
 
-    // Comprehensive URL validation before attempting connection
-    if (!wsUrl || typeof wsUrl !== 'string' || wsUrl.trim() === '') {
-      const errorMessage = `WebSocket URL is missing or empty. Received: ${typeof wsUrl} "${wsUrl}"`;
-      console.error('[LiveKit] Connection failed:', errorMessage);
+    // Step 1: Basic null/undefined checks
+    console.log('[LiveKit] Step 1: Basic validation');
+    if (!wsUrl) {
+      const errorMessage = `WebSocket URL is falsy. Received: ${wsUrl}`;
+      console.error('[LiveKit] VALIDATION FAILED:', errorMessage);
       setError(errorMessage);
       onError?.(new Error(errorMessage));
       return;
     }
 
-    // Check if wsUrl is a valid WebSocket URL
-    try {
-      const cleanedUrl = wsUrl.trim();
-      console.log('[LiveKit] Cleaned URL:', `"${cleanedUrl}"`);
-      
-      const url = new URL(cleanedUrl);
-      console.log('[LiveKit] Parsed URL components:', {
-        protocol: url.protocol,
-        hostname: url.hostname,
-        port: url.port,
-        pathname: url.pathname
-      });
-      
-      if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
-        throw new Error('URL must use ws:// or wss:// protocol');
-      }
-      console.log('[LiveKit] Valid WebSocket URL detected:', cleanedUrl);
-    } catch (urlError) {
-      const errorMessage = `Invalid WebSocket URL format. URL: "${wsUrl}", Error: ${urlError instanceof Error ? urlError.message : 'Unknown URL error'}`;
-      console.error('[LiveKit] URL validation failed:', errorMessage);
+    if (typeof wsUrl !== 'string') {
+      const errorMessage = `WebSocket URL is not a string. Type: ${typeof wsUrl}, Value: ${wsUrl}`;
+      console.error('[LiveKit] VALIDATION FAILED:', errorMessage);
       setError(errorMessage);
       onError?.(new Error(errorMessage));
       return;
     }
 
-    // Validate token
+    // Step 2: Check for empty string after trim
+    console.log('[LiveKit] Step 2: Empty string check');
+    const trimmedUrl = wsUrl.trim();
+    console.log('- Original URL:', `"${wsUrl}"`);
+    console.log('- Trimmed URL:', `"${trimmedUrl}"`);
+    console.log('- Trimmed length:', trimmedUrl.length);
+
+    if (trimmedUrl === '') {
+      const errorMessage = `WebSocket URL is empty after trim. Original: "${wsUrl}"`;
+      console.error('[LiveKit] VALIDATION FAILED:', errorMessage);
+      setError(errorMessage);
+      onError?.(new Error(errorMessage));
+      return;
+    }
+
+    // Step 3: Token validation
+    console.log('[LiveKit] Step 3: Token validation');
     if (!token || typeof token !== 'string' || token.trim() === '') {
-      const errorMessage = `Access token is missing or empty. Received: ${typeof token} "${token}"`;
-      console.error('[LiveKit] Connection failed:', errorMessage);
+      const errorMessage = `Access token is invalid. Type: ${typeof token}, Length: ${token?.length || 0}`;
+      console.error('[LiveKit] VALIDATION FAILED:', errorMessage);
       setError(errorMessage);
       onError?.(new Error(errorMessage));
       return;
     }
+
+    // Step 4: Use URL exactly as received
+    console.log('[LiveKit] Step 4: Preparing for connection');
+    const finalUrl = wsUrl; // No modification whatsoever
+    const finalToken = token;
+    
+    console.log('[LiveKit] Final connection parameters:');
+    console.log('- finalUrl:', `"${finalUrl}"`);
+    console.log('- finalUrl === wsUrl:', finalUrl === wsUrl);
+    console.log('- finalToken length:', finalToken.length);
 
     setIsConnecting(true);
     setError(null);
 
     try {
+      console.log('[LiveKit] Step 5: Creating Room instance');
       const newRoom = new Room({
         adaptiveStream: true,
         dynacast: true,
@@ -119,16 +139,17 @@ export const useLiveKit = ({
         },
       });
 
+      console.log('[LiveKit] Step 6: Setting up event listeners');
       // Set up event listeners
       newRoom.on(RoomEvent.Connected, () => {
-        console.log('[LiveKit] Connected to room successfully');
+        console.log('[LiveKit] ✅ Connected to room successfully');
         setIsConnected(true);
         setIsConnecting(false);
         onConnected?.();
       });
 
       newRoom.on(RoomEvent.Disconnected, (reason) => {
-        console.log('[LiveKit] Disconnected from room:', reason);
+        console.log('[LiveKit] ❌ Disconnected from room:', reason);
         setIsConnected(false);
         setIsConnecting(false);
         onDisconnected?.();
@@ -136,7 +157,7 @@ export const useLiveKit = ({
 
       newRoom.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
         if (track.kind === Track.Kind.Audio) {
-          console.log('[LiveKit] Audio track subscribed');
+          console.log('[LiveKit] 🎵 Audio track subscribed');
           setRemoteAudioTracks(prev => [...prev, track as RemoteAudioTrack]);
           
           // Handle audio data if callback provided
@@ -149,7 +170,7 @@ export const useLiveKit = ({
 
       newRoom.on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
         if (track.kind === Track.Kind.Audio) {
-          console.log('[LiveKit] Audio track unsubscribed');
+          console.log('[LiveKit] 🎵 Audio track unsubscribed');
           setRemoteAudioTracks(prev => 
             prev.filter(t => t.sid !== track.sid)
           );
@@ -159,7 +180,7 @@ export const useLiveKit = ({
       newRoom.on(RoomEvent.DataReceived, (payload: Uint8Array, participant) => {
         try {
           const data = JSON.parse(new TextDecoder().decode(payload));
-          console.log('[LiveKit] Data received from', participant?.identity, data);
+          console.log('[LiveKit] 📨 Data received from', participant?.identity, data);
           
           // Handle different types of data messages
           if (data.type === 'question') {
@@ -168,34 +189,32 @@ export const useLiveKit = ({
             // Handle real-time feedback
           }
         } catch (error) {
-          console.error('[LiveKit] Error parsing data message:', error);
+          console.error('[LiveKit] ❌ Error parsing data message:', error);
         }
       });
 
       newRoom.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
-        console.log('[LiveKit] Connection quality changed:', quality, participant?.identity);
+        console.log('[LiveKit] 📊 Connection quality changed:', quality, participant?.identity);
       });
 
       // Connect to the room
+      console.log('[LiveKit] Step 7: Preparing connect options');
       const connectOptions: ConnectOptions = {
         autoSubscribe: true,
       };
-
-      const finalUrl = wsUrl.trim();
-      const finalToken = token.trim();
       
-      console.log('[LiveKit] Attempting to connect with:');
-      console.log('- URL:', `"${finalUrl}"`);
-      console.log('- Token length:', finalToken.length);
+      console.log('[LiveKit] Step 8: About to call newRoom.connect()');
+      console.log('- URL being passed to connect():', `"${finalUrl}"`);
       console.log('- Token preview:', finalToken.substring(0, 20) + '...');
       
       await newRoom.connect(finalUrl, finalToken, connectOptions);
       
+      console.log('[LiveKit] ✅ newRoom.connect() completed successfully');
       setRoom(newRoom);
       roomRef.current = newRoom;
 
     } catch (err) {
-      console.error('[LiveKit] Failed to connect to room:', err);
+      console.error('[LiveKit] ❌ Connection failed with error:', err);
       console.error('[LiveKit] Error details:', {
         name: err instanceof Error ? err.name : 'Unknown',
         message: err instanceof Error ? err.message : 'Unknown error',
@@ -207,11 +226,13 @@ export const useLiveKit = ({
       setIsConnecting(false);
       onError?.(err instanceof Error ? err : new Error(errorMessage));
     }
+
+    console.log('[LiveKit] ========== CONNECTION ATTEMPT END ==========');
   }, [wsUrl, token, isConnecting, isConnected, onConnected, onDisconnected, onError, onAudioReceived]);
 
   const disconnectFromRoom = useCallback(() => {
     if (roomRef.current) {
-      console.log('[LiveKit] Disconnecting from room');
+      console.log('[LiveKit] 🔌 Disconnecting from room');
       roomRef.current.disconnect();
       roomRef.current = null;
       setRoom(null);
@@ -237,9 +258,9 @@ export const useLiveKit = ({
       await room.localParticipant.publishTrack(track);
       
       setLocalAudioTrack(track);
-      console.log('[LiveKit] Audio track published successfully');
+      console.log('[LiveKit] 🎤 Audio track published successfully');
     } catch (err) {
-      console.error('[LiveKit] Failed to start audio:', err);
+      console.error('[LiveKit] ❌ Failed to start audio:', err);
       setError(err instanceof Error ? err.message : 'Failed to start audio');
     }
   }, [room, localAudioTrack]);
@@ -249,7 +270,7 @@ export const useLiveKit = ({
       localAudioTrack.stop();
       room?.localParticipant.unpublishTrack(localAudioTrack);
       setLocalAudioTrack(null);
-      console.log('[LiveKit] Audio track stopped');
+      console.log('[LiveKit] 🎤 Audio track stopped');
     }
   }, [localAudioTrack, room]);
 
@@ -259,9 +280,9 @@ export const useLiveKit = ({
         const message = JSON.stringify(data);
         const encoder = new TextEncoder();
         room.localParticipant.publishData(encoder.encode(message));
-        console.log('[LiveKit] Data message sent:', data);
+        console.log('[LiveKit] 📨 Data message sent:', data);
       } catch (err) {
-        console.error('[LiveKit] Failed to send data message:', err);
+        console.error('[LiveKit] ❌ Failed to send data message:', err);
       }
     }
   }, [room, isConnected]);
