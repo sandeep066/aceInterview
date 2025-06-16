@@ -7,7 +7,7 @@ export class LiveKitService {
     this.apiSecret = process.env.LIVEKIT_API_SECRET;
     this.wsUrl = process.env.LIVEKIT_WS_URL;
     
-    console.log('LiveKit Environment Variables:');
+    console.log('[LiveKitService] Environment Variables:');
     console.log('- API_KEY:', this.apiKey ? 'Set' : 'Not set');
     console.log('- API_SECRET:', this.apiSecret ? 'Set' : 'Not set');
     console.log('- WS_URL:', this.wsUrl ? `"${this.wsUrl}"` : 'Not set');
@@ -19,9 +19,9 @@ export class LiveKitService {
     }
     
     if (!this.apiKey || !this.apiSecret || !this.wsUrl) {
-      console.warn('LiveKit credentials not configured properly. Voice interviews will be disabled.');
+      console.warn('[LiveKitService] LiveKit credentials not configured properly. Voice interviews will be disabled.');
     } else {
-      console.log('LiveKit service initialized successfully');
+      console.log('[LiveKitService] LiveKit service initialized successfully');
     }
   }
 
@@ -84,7 +84,7 @@ export class LiveKitService {
 
   isConfigured() {
     const configured = !!(this.apiKey && this.apiSecret && this.wsUrl);
-    console.log('LiveKit configuration check:', {
+    console.log('[LiveKitService] Configuration check:', {
       apiKey: !!this.apiKey,
       apiSecret: !!this.apiSecret,
       wsUrl: !!this.wsUrl,
@@ -94,6 +94,7 @@ export class LiveKitService {
   }
 
   getWebSocketUrl() {
+    console.log('[LiveKitService] getWebSocketUrl() called, returning:', `"${this.wsUrl}"`);
     return this.wsUrl;
   }
 
@@ -162,6 +163,9 @@ export class LiveKitService {
    * Create a new interview room
    */
   async createInterviewRoom(interviewConfig, participantName) {
+    console.log('[LiveKitService] createInterviewRoom() called');
+    console.log('[LiveKitService] Current wsUrl:', `"${this.wsUrl}"`);
+    
     const roomName = `interview-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
     try {
@@ -178,15 +182,23 @@ export class LiveKitService {
 
       const interviewerToken = this.generateInterviewerToken(roomName, interviewConfig);
 
-      return {
+      const roomData = {
         roomName,
         wsUrl: this.wsUrl,
         participantToken,
         interviewerToken,
         config: interviewConfig
       };
+      
+      console.log('[LiveKitService] Room data created:');
+      console.log('- roomName:', roomData.roomName);
+      console.log('- wsUrl:', typeof roomData.wsUrl, `"${roomData.wsUrl}"`);
+      console.log('- participantToken length:', roomData.participantToken?.length || 0);
+      console.log('- interviewerToken length:', roomData.interviewerToken?.length || 0);
+
+      return roomData;
     } catch (error) {
-      console.error('Error creating interview room:', error);
+      console.error('[LiveKitService] Error creating interview room:', error);
       throw new Error('Failed to create interview room');
     }
   }

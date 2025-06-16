@@ -145,19 +145,25 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       
       // Start voice interview session
       const session = await VoiceInterviewService.startVoiceInterview(config, participantName);
-      console.log('[VoiceInterview] Session created:', session);
+      console.log('[VoiceInterview] Session received from backend:', session);
       
       // Detailed logging for debugging
       console.log('[VoiceInterview] Session details:');
       console.log('- sessionId:', session.sessionId);
       console.log('- roomName:', session.roomName);
-      console.log('- wsUrl:', typeof session.wsUrl, `"${session.wsUrl}"`);
+      console.log('- wsUrl type:', typeof session.wsUrl);
+      console.log('- wsUrl value:', `"${session.wsUrl}"`);
+      console.log('- wsUrl length:', session.wsUrl?.length || 0);
       console.log('- participantToken:', session.participantToken ? 'Present' : 'Missing');
       console.log('- firstQuestion:', session.firstQuestion);
       
       // Validate session data before proceeding
-      if (!session.wsUrl || !session.participantToken) {
-        throw new Error(`Invalid session data: wsUrl=${session.wsUrl}, token=${session.participantToken ? 'present' : 'missing'}`);
+      if (!session.wsUrl || session.wsUrl.trim() === '') {
+        throw new Error(`Invalid WebSocket URL received from backend: "${session.wsUrl}"`);
+      }
+      
+      if (!session.participantToken) {
+        throw new Error('No participant token received from backend');
       }
       
       setVoiceSession(session);
@@ -168,9 +174,9 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         : session.firstQuestion?.question || 'Welcome to your voice interview. Please wait for the first question.';
       setCurrentQuestion(firstQuestion);
       
-      console.log('[VoiceInterview] Attempting to connect to LiveKit...');
-      console.log('[VoiceInterview] Will use wsUrl:', `"${session.wsUrl}"`);
-      console.log('[VoiceInterview] Will use token length:', session.participantToken.length);
+      console.log('[VoiceInterview] About to connect to LiveKit with:');
+      console.log('- wsUrl:', `"${session.wsUrl}"`);
+      console.log('- token length:', session.participantToken.length);
       
       // Connect to LiveKit room - this will now use the validated URLs
       await connectLiveKit();
@@ -586,7 +592,9 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                       <div className="text-xs text-blue-600">
                         <div>Session: {voiceSession.sessionId}</div>
                         <div>Room: {voiceSession.roomName}</div>
-                        <div>URL: {voiceSession.wsUrl}</div>
+                        <div>URL: "{voiceSession.wsUrl}"</div>
+                        <div>URL Length: {voiceSession.wsUrl?.length || 0}</div>
+                        <div>Token Length: {voiceSession.participantToken?.length || 0}</div>
                       </div>
                     </div>
                   )}
