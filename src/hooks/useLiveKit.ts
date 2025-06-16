@@ -72,7 +72,7 @@ export const useLiveKit = ({
       }
       console.log('[LiveKit] Valid WebSocket URL detected:', wsUrl);
     } catch (urlError) {
-      const errorMessage = `Invalid WebSocket URL format: ${urlError instanceof Error ? urlError.message : 'Unknown URL error'}`;
+      const errorMessage = `Invalid WebSocket URL format: ${wsUrl}`;
       console.error('[LiveKit] URL validation failed:', errorMessage);
       setError(errorMessage);
       onError?.(new Error(errorMessage));
