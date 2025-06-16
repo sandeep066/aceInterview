@@ -108,7 +108,7 @@ export class LiveKitService {
   }
 
   getWebSocketUrl() {
-    return this.wsUrl;
+    return this.wsUrl || 'wss://test-3q4r3w5h.livekit.cloud';
   }
 
   /**
