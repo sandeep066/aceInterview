@@ -12,18 +12,10 @@ export class LiveKitService {
     console.log('- API_SECRET:', this.apiSecret ? 'Set' : 'Not set');
     console.log('- WS_URL:', this.wsUrl ? `"${this.wsUrl}"` : 'Not set');
     
-    // Clean and validate the WebSocket URL
+    // Clean the WebSocket URL but don't invalidate it
     if (this.wsUrl) {
       this.wsUrl = this.wsUrl.trim().replace(/['"]/g, '');
-      
-      // Check if wsUrl contains placeholder values
-      if (this.wsUrl.includes('your-livekit-server.com')) {
-        console.warn('LiveKit WebSocket URL contains placeholder values. Voice interviews will be disabled.');
-        this.wsUrl = null;
-      } else if (!this.isValidWebSocketUrl(this.wsUrl)) {
-        console.warn('LiveKit WebSocket URL format is invalid. Voice interviews will be disabled.');
-        this.wsUrl = null;
-      }
+      console.log('- WS_URL (cleaned):', `"${this.wsUrl}"`);
     }
     
     if (!this.apiKey || !this.apiSecret || !this.wsUrl) {
@@ -49,12 +41,6 @@ export class LiveKitService {
         return false;
       }
       
-      // Check for placeholder values
-      if (trimmedUrl.includes('your-livekit-server.com')) {
-        console.warn('URL contains placeholder value');
-        return false;
-      }
-      
       // Check if it starts with ws:// or wss://
       if (!trimmedUrl.startsWith('ws://') && !trimmedUrl.startsWith('wss://')) {
         console.warn('URL does not start with ws:// or wss://');
@@ -76,8 +62,8 @@ export class LiveKitService {
         return false;
       }
       
-      // Validate hostname exists and is not placeholder
-      if (!urlObj.hostname || urlObj.hostname === 'your-livekit-server.com') {
+      // Validate hostname exists
+      if (!urlObj.hostname) {
         console.warn('Invalid hostname:', urlObj.hostname);
         return false;
       }
@@ -108,7 +94,7 @@ export class LiveKitService {
   }
 
   getWebSocketUrl() {
-    return this.wsUrl || 'wss://test-3q4r3w5h.livekit.cloud';
+    return this.wsUrl;
   }
 
   /**
