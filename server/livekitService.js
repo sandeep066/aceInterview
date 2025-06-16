@@ -7,6 +7,11 @@ export class LiveKitService {
     this.apiSecret = process.env.LIVEKIT_API_SECRET;
     this.wsUrl = process.env.LIVEKIT_WS_URL;
     
+    console.log('LiveKit Environment Variables:');
+    console.log('- API_KEY:', this.apiKey ? 'Set' : 'Not set');
+    console.log('- API_SECRET:', this.apiSecret ? 'Set' : 'Not set');
+    console.log('- WS_URL:', this.wsUrl ? `"${this.wsUrl}"` : 'Not set');
+    
     // Check if wsUrl contains placeholder values
     if (this.wsUrl && this.wsUrl.includes('your-livekit-server.com')) {
       console.warn('LiveKit WebSocket URL contains placeholder values. Voice interviews will be disabled.');
@@ -26,53 +31,85 @@ export class LiveKitService {
 
   isValidWebSocketUrl(url) {
     try {
-      // Basic string validation first
-      if (!url || typeof url !== 'string' || url.trim() === '') {
+      // Basic validation first
+      if (!url || typeof url !== 'string') {
+        console.warn('URL is not a valid string:', typeof url, url);
         return false;
       }
       
       const trimmedUrl = url.trim();
+      console.log('Validating URL:', `"${trimmedUrl}"`);
+      
+      if (trimmedUrl === '') {
+        console.warn('URL is empty after trimming');
+        return false;
+      }
       
       // Check for placeholder values
       if (trimmedUrl.includes('your-livekit-server.com')) {
+        console.warn('URL contains placeholder value');
         return false;
       }
       
       // Check if it starts with ws:// or wss://
       if (!trimmedUrl.startsWith('ws://') && !trimmedUrl.startsWith('wss://')) {
+        console.warn('URL does not start with ws:// or wss://');
         return false;
       }
       
-      // Try to parse as URL with better error handling
+      // More lenient URL parsing - handle edge cases
       let urlObj;
       try {
+        // Try direct URL parsing first
         urlObj = new URL(trimmedUrl);
-      } catch (urlError) {
-        console.warn('Failed to parse WebSocket URL:', urlError.message);
-        return false;
+      } catch (directError) {
+        console.warn('Direct URL parsing failed:', directError.message);
+        
+        // Try to fix common issues
+        let fixedUrl = trimmedUrl;
+        
+        // Remove any extra quotes or spaces
+        fixedUrl = fixedUrl.replace(/['"]/g, '').trim();
+        
+        // Ensure proper protocol format
+        if (fixedUrl.startsWith('ws:') && !fixedUrl.startsWith('ws://')) {
+          fixedUrl = fixedUrl.replace('ws:', 'ws://');
+        }
+        if (fixedUrl.startsWith('wss:') && !fixedUrl.startsWith('wss://')) {
+          fixedUrl = fixedUrl.replace('wss:', 'wss://');
+        }
+        
+        try {
+          urlObj = new URL(fixedUrl);
+          console.log('URL parsing succeeded after fixing:', fixedUrl);
+        } catch (fixedError) {
+          console.warn('URL parsing failed even after fixing:', fixedError.message);
+          return false;
+        }
       }
       
       // Validate protocol
       if (urlObj.protocol !== 'ws:' && urlObj.protocol !== 'wss:') {
+        console.warn('Invalid protocol:', urlObj.protocol);
         return false;
       }
       
       // Validate hostname exists and is not placeholder
       if (!urlObj.hostname || urlObj.hostname === 'your-livekit-server.com') {
+        console.warn('Invalid hostname:', urlObj.hostname);
         return false;
       }
       
-      // Additional validation for LiveKit Cloud URLs
-      if (urlObj.hostname.includes('livekit.cloud')) {
-        // LiveKit Cloud URLs should be valid
-        return true;
-      }
+      console.log('URL validation successful:', {
+        protocol: urlObj.protocol,
+        hostname: urlObj.hostname,
+        port: urlObj.port
+      });
       
-      // For other URLs, ensure they have a valid hostname
-      return urlObj.hostname.length > 0 && urlObj.hostname !== 'localhost' || urlObj.hostname === 'localhost';
+      return true;
       
     } catch (error) {
-      console.warn('Error validating WebSocket URL:', error.message);
+      console.error('Unexpected error in URL validation:', error);
       return false;
     }
   }
