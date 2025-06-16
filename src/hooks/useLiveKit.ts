@@ -56,13 +56,13 @@ export const useLiveKit = ({
     if (isConnecting || isConnected) return;
 
     // Comprehensive URL validation before attempting connection
-    if (!wsUrl || typeof wsUrl !== 'string' || wsUrl.trim() === '') {
-      const errorMessage = 'WebSocket URL is missing or empty Amit text';
-      console.error('[LiveKit] Connection failed:', errorMessage);
-      setError(errorMessage);
-      onError?.(new Error(errorMessage));
-      return;
-    }
+    //if (!wsUrl || typeof wsUrl !== 'string' || wsUrl.trim() === '') {
+    //  const errorMessage = 'WebSocket URL is missing or empty Amit text'  ;
+    //  console.error('[LiveKit] Connection failed:', errorMessage);
+    //  setError(errorMessage);
+    //  onError?.(new Error(errorMessage));
+    //  return;
+    //}
 
     // Check if wsUrl is a valid WebSocket URL
     try {
