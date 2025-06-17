@@ -83,6 +83,10 @@ app.post('/api/analyze-response', async (req, res) => {
 
 app.post('/api/generate-analytics', async (req, res) => {
   try {
+    console.log('[pmr] /generate-analytics called');
+    console.log('[pmr] responses:', JSON.stringify(responses, null, 2));
+    console.log('[pmr] config:', JSON.stringify(config, null, 2));
+    
     const { responses, config } = req.body;
     
     const analytics = await questionGenerator.generateComprehensiveAnalytics({
