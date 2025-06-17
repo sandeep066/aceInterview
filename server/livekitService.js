@@ -101,7 +101,7 @@ export class LiveKitService {
   /**
    * Generate access token for a participant to join a LiveKit room
    */
-  async generateAccessToken(roomName, participantName, metadata = {}) {
+  generateAccessToken(roomName, participantName, metadata = {}) {
     if (!this.isConfigured()) {
       console.error('[LiveKitService] Cannot generate token - not configured');
       throw new Error('LiveKit not configured');
@@ -115,17 +115,12 @@ export class LiveKitService {
     });
 
     try {
-      console.log('[LiveKit] Generating AccessToken...');
-      console.log('[LiveKit] participantName:', participantName);
-      console.log('[LiveKit] metadata:', JSON.stringify(metadata, null, 2));
-      console.log('[LiveKit] apiKey:', this.apiKey ? '[SET]' :     '[MISSING]');
-      console.log('[LiveKit] apiSecret:', this.apiSecret ? '[SET]' : '[MISSING]');
       const at = new AccessToken(this.apiKey, this.apiSecret, {
         identity: participantName,
         name: participantName,
         metadata: JSON.stringify(metadata)
       });
-      console.log('[LiveKit] AccessToken created:', at);
+
       // Grant permissions for the participant
       at.addGrant({
         roomJoin: true,
@@ -136,42 +131,12 @@ export class LiveKitService {
         canUpdateOwnMetadata: true,
       });
 
-      // Generate the token and ensure it's a string
-      let token;
-      try {
-        token = await at.toJwt();
-        console.log('[LiveKit] Generated JWT token:', token);
-        console.log('[LiveKitService] Raw token from toJwt():', {
-          type: typeof token,
-          isString: typeof token === 'string',
-          length: token?.length || 0,
-          constructor: token?.constructor?.name || 'unknown'
-        });
-      } catch (jwtError) {
-        console.error('[LiveKitService] Error calling toJwt():', jwtError);
-        throw new Error(`Failed to generate JWT: ${jwtError.message}`);
-      }
+      // Generate the token synchronously (not async)
+      const token = at.toJwt();
       
-      // Handle case where toJwt() returns an object instead of string
-      if (typeof token === 'object' && token !== null) {
-        console.error('[LiveKitService] toJwt() returned object instead of string:', token);
-        
-        // Try to extract token from object if it has a token property
-        if (token.token && typeof token.token === 'string') {
-          console.log('[LiveKitService] Found token property in object, using that');
-          token = token.token;
-        } else if (token.jwt && typeof token.jwt === 'string') {
-          console.log('[LiveKitService] Found jwt property in object, using that');
-          token = token.jwt;
-        } else {
-          console.error('[LiveKitService] Object does not contain valid token string');
-          throw new Error('AccessToken.toJwt() returned object without valid token string');
-        }
-      }
-      
-      // Final validation that we have a string token
+      // Validate that the token is actually a string
       if (typeof token !== 'string' || token.length === 0) {
-        console.error('[LiveKitService] Final token validation failed:', {
+        console.error('[LiveKitService] Generated token is not a valid string:', {
           type: typeof token,
           length: token?.length || 0,
           token: token
@@ -190,7 +155,7 @@ export class LiveKitService {
   /**
    * Generate access token for the AI interviewer bot
    */
-  async generateInterviewerToken(roomName, interviewConfig) {
+  generateInterviewerToken(roomName, interviewConfig) {
     if (!this.isConfigured()) {
       console.error('[LiveKitService] Cannot generate interviewer token - not configured');
       throw new Error('LiveKit not configured');
@@ -225,41 +190,12 @@ export class LiveKitService {
         roomAdmin: true,
       });
 
-      // Generate the token and ensure it's a string
-      let token;
-      try {
-        token = await at.toJwt();
-        console.log('[LiveKitService] Raw interviewer token from toJwt():', {
-          type: typeof token,
-          isString: typeof token === 'string',
-          length: token?.length || 0,
-          constructor: token?.constructor?.name || 'unknown'
-        });
-      } catch (jwtError) {
-        console.error('[LiveKitService] Error calling toJwt() for interviewer:', jwtError);
-        throw new Error(`Failed to generate interviewer JWT: ${jwtError.message}`);
-      }
+      // Generate the token synchronously (not async)
+      const token = at.toJwt();
       
-      // Handle case where toJwt() returns an object instead of string
-      if (typeof token === 'object' && token !== null) {
-        console.error('[LiveKitService] toJwt() returned object instead of string for interviewer:', token);
-        
-        // Try to extract token from object if it has a token property
-        if (token.token && typeof token.token === 'string') {
-          console.log('[LiveKitService] Found token property in interviewer object, using that');
-          token = token.token;
-        } else if (token.jwt && typeof token.jwt === 'string') {
-          console.log('[LiveKitService] Found jwt property in interviewer object, using that');
-          token = token.jwt;
-        } else {
-          console.error('[LiveKitService] Interviewer object does not contain valid token string');
-          throw new Error('AccessToken.toJwt() returned object without valid token string for interviewer');
-        }
-      }
-      
-      // Final validation that we have a string token
+      // Validate that the token is actually a string
       if (typeof token !== 'string' || token.length === 0) {
-        console.error('[LiveKitService] Final interviewer token validation failed:', {
+        console.error('[LiveKitService] Generated interviewer token is not a valid string:', {
           type: typeof token,
           length: token?.length || 0,
           token: token
@@ -286,7 +222,7 @@ export class LiveKitService {
     
     try {
       // Generate tokens for both participant and AI interviewer
-      const participantToken = await this.generateAccessToken(
+      const participantToken = this.generateAccessToken(
         roomName, 
         participantName,
         {
@@ -296,7 +232,7 @@ export class LiveKitService {
         }
       );
 
-      const interviewerToken = await this.generateInterviewerToken(roomName, interviewConfig);
+      const interviewerToken = this.generateInterviewerToken(roomName, interviewConfig);
 
       const roomData = {
         roomName,
