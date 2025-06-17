@@ -99,7 +99,10 @@ export class APIService {
 
   static async post(url: string, data?: any): Promise<any> {
     try {
+      console.log(`pmr URL ${url} :` );
+      console.dir(`pmr DATA ${data}:` );
       return await apiClient.post(url, data);
+      
     } catch (error) {
       console.error(`POST ${url} failed:`, error);
       throw error;
