@@ -99,8 +99,8 @@ export class APIService {
 
   static async post(url: string, data?: any): Promise<any> {
     try {
-      console.log(`pmr URL ${url} :` );
-      console.dir(`pmr DATA ${data}:` );
+      console.log(`pmr URL ${url}` );
+      console.dir(`pmr DATA ${data}` );
       console.log('pmr Object', JSON.stringify(data, null, 2));
       return await apiClient.post(url, data);
       
