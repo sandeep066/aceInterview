@@ -101,7 +101,7 @@ export class LiveKitService {
   /**
    * Generate access token for a participant to join a LiveKit room
    */
-  generateAccessToken(roomName, participantName, metadata = {}) {
+  async generateAccessToken(roomName, participantName, metadata = {}) {
     if (!this.isConfigured()) {
       console.error('[LiveKitService] Cannot generate token - not configured');
       throw new Error('LiveKit not configured');
@@ -132,8 +132,8 @@ export class LiveKitService {
 
       console.log('[LiveKit] AccessToken created:', at);
 
-      // Generate the token synchronously (not async)
-      const token = at.toJwt();
+      // Generate the token with await (this was the fix for the Promise issue)
+      const token = await at.toJwt();
       
       console.log('[LiveKit] Generated JWT token:', token);
       
@@ -158,7 +158,7 @@ export class LiveKitService {
   /**
    * Generate access token for the AI interviewer bot
    */
-  generateInterviewerToken(roomName, interviewConfig) {
+  async generateInterviewerToken(roomName, interviewConfig) {
     if (!this.isConfigured()) {
       console.error('[LiveKitService] Cannot generate interviewer token - not configured');
       throw new Error('LiveKit not configured');
@@ -190,11 +190,10 @@ export class LiveKitService {
         canSubscribe: true,
         canPublishData: true,
         canUpdateOwnMetadata: true,
-        roomAdmin: true,
       });
 
-      // Generate the token synchronously (not async)
-      const token = at.toJwt();
+      // Generate the token with await (this was the fix for the Promise issue)
+      const token = await at.toJwt();
       
       // Validate that the token is actually a string
       if (typeof token !== 'string' || token.length === 0) {
@@ -225,7 +224,7 @@ export class LiveKitService {
     
     try {
       // Generate tokens for both participant and AI interviewer
-      const participantToken = this.generateAccessToken(
+      const participantToken = await this.generateAccessToken(
         roomName, 
         participantName,
         {
@@ -235,7 +234,7 @@ export class LiveKitService {
         }
       );
 
-      const interviewerToken = this.generateInterviewerToken(roomName, interviewConfig);
+      const interviewerToken = await this.generateInterviewerToken(roomName, interviewConfig);
 
       const roomData = {
         roomName,
@@ -261,8 +260,8 @@ export class LiveKitService {
   /**
    * Generate a token for reconnecting to an existing room
    */
-  generateReconnectToken(roomName, participantName, metadata = {}) {
-    return this.generateAccessToken(roomName, participantName, {
+  async generateReconnectToken(roomName, participantName, metadata = {}) {
+    return await this.generateAccessToken(roomName, participantName, {
       ...metadata,
       reconnectedAt: new Date().toISOString()
     });
