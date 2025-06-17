@@ -101,7 +101,7 @@ export class LiveKitService {
   /**
    * Generate access token for a participant to join a LiveKit room
    */
-  generateAccessToken(roomName, participantName, metadata = {}) {
+  async generateAccessToken(roomName, participantName, metadata = {}) {
     if (!this.isConfigured()) {
       console.error('[LiveKitService] Cannot generate token - not configured');
       throw new Error('LiveKit not configured');
@@ -139,7 +139,7 @@ export class LiveKitService {
       // Generate the token and ensure it's a string
       let token;
       try {
-        token = at.toJwt();
+        token = await at.toJwt();
         console.log('[LiveKit] Generated JWT token:', token);
         console.log('[LiveKitService] Raw token from toJwt():', {
           type: typeof token,
