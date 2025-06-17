@@ -115,18 +115,6 @@ export class LiveKitService {
     });
 
     try {
-      // Validate API key format - LiveKit API keys should start with 'API'
-      if (!this.apiKey.startsWith('API')) {
-        console.error('[LiveKitService] Invalid API key format - should start with "API"');
-        throw new Error('Invalid LiveKit API key format');
-      }
-
-      // Validate API secret length - should be a reasonable length
-      if (this.apiSecret.length < 32) {
-        console.error('[LiveKitService] API secret appears too short');
-        throw new Error('Invalid LiveKit API secret - too short');
-      }
-
       const at = new AccessToken(this.apiKey, this.apiSecret, {
         identity: participantName,
         name: participantName,
@@ -143,11 +131,41 @@ export class LiveKitService {
         canUpdateOwnMetadata: true,
       });
 
-      const token = at.toJwt();
+      // Generate the token and ensure it's a string
+      let token;
+      try {
+        token = at.toJwt();
+        console.log('[LiveKitService] Raw token from toJwt():', {
+          type: typeof token,
+          isString: typeof token === 'string',
+          length: token?.length || 0,
+          constructor: token?.constructor?.name || 'unknown'
+        });
+      } catch (jwtError) {
+        console.error('[LiveKitService] Error calling toJwt():', jwtError);
+        throw new Error(`Failed to generate JWT: ${jwtError.message}`);
+      }
       
-      // Validate that the token is actually a string
+      // Handle case where toJwt() returns an object instead of string
+      if (typeof token === 'object' && token !== null) {
+        console.error('[LiveKitService] toJwt() returned object instead of string:', token);
+        
+        // Try to extract token from object if it has a token property
+        if (token.token && typeof token.token === 'string') {
+          console.log('[LiveKitService] Found token property in object, using that');
+          token = token.token;
+        } else if (token.jwt && typeof token.jwt === 'string') {
+          console.log('[LiveKitService] Found jwt property in object, using that');
+          token = token.jwt;
+        } else {
+          console.error('[LiveKitService] Object does not contain valid token string');
+          throw new Error('AccessToken.toJwt() returned object without valid token string');
+        }
+      }
+      
+      // Final validation that we have a string token
       if (typeof token !== 'string' || token.length === 0) {
-        console.error('[LiveKitService] Generated token is not a valid string:', {
+        console.error('[LiveKitService] Final token validation failed:', {
           type: typeof token,
           length: token?.length || 0,
           token: token
@@ -180,18 +198,6 @@ export class LiveKitService {
     });
 
     try {
-      // Validate API key format - LiveKit API keys should start with 'API'
-      if (!this.apiKey.startsWith('API')) {
-        console.error('[LiveKitService] Invalid API key format - should start with "API"');
-        throw new Error('Invalid LiveKit API key format');
-      }
-
-      // Validate API secret length - should be a reasonable length
-      if (this.apiSecret.length < 32) {
-        console.error('[LiveKitService] API secret appears too short');
-        throw new Error('Invalid LiveKit API secret - too short');
-      }
-
       const at = new AccessToken(this.apiKey, this.apiSecret, {
         identity: interviewerIdentity,
         name: 'AI Interviewer',
@@ -213,11 +219,41 @@ export class LiveKitService {
         roomAdmin: true,
       });
 
-      const token = at.toJwt();
+      // Generate the token and ensure it's a string
+      let token;
+      try {
+        token = at.toJwt();
+        console.log('[LiveKitService] Raw interviewer token from toJwt():', {
+          type: typeof token,
+          isString: typeof token === 'string',
+          length: token?.length || 0,
+          constructor: token?.constructor?.name || 'unknown'
+        });
+      } catch (jwtError) {
+        console.error('[LiveKitService] Error calling toJwt() for interviewer:', jwtError);
+        throw new Error(`Failed to generate interviewer JWT: ${jwtError.message}`);
+      }
       
-      // Validate that the token is actually a string
+      // Handle case where toJwt() returns an object instead of string
+      if (typeof token === 'object' && token !== null) {
+        console.error('[LiveKitService] toJwt() returned object instead of string for interviewer:', token);
+        
+        // Try to extract token from object if it has a token property
+        if (token.token && typeof token.token === 'string') {
+          console.log('[LiveKitService] Found token property in interviewer object, using that');
+          token = token.token;
+        } else if (token.jwt && typeof token.jwt === 'string') {
+          console.log('[LiveKitService] Found jwt property in interviewer object, using that');
+          token = token.jwt;
+        } else {
+          console.error('[LiveKitService] Interviewer object does not contain valid token string');
+          throw new Error('AccessToken.toJwt() returned object without valid token string for interviewer');
+        }
+      }
+      
+      // Final validation that we have a string token
       if (typeof token !== 'string' || token.length === 0) {
-        console.error('[LiveKitService] Generated interviewer token is not a valid string:', {
+        console.error('[LiveKitService] Final interviewer token validation failed:', {
           type: typeof token,
           length: token?.length || 0,
           token: token
