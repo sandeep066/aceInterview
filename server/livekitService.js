@@ -190,7 +190,7 @@ export class LiveKitService {
   /**
    * Generate access token for the AI interviewer bot
    */
-  generateInterviewerToken(roomName, interviewConfig) {
+  async generateInterviewerToken(roomName, interviewConfig) {
     if (!this.isConfigured()) {
       console.error('[LiveKitService] Cannot generate interviewer token - not configured');
       throw new Error('LiveKit not configured');
@@ -228,7 +228,7 @@ export class LiveKitService {
       // Generate the token and ensure it's a string
       let token;
       try {
-        token = at.toJwt();
+        token = await at.toJwt();
         console.log('[LiveKitService] Raw interviewer token from toJwt():', {
           type: typeof token,
           isString: typeof token === 'string',
@@ -286,7 +286,7 @@ export class LiveKitService {
     
     try {
       // Generate tokens for both participant and AI interviewer
-      const participantToken = this.generateAccessToken(
+      const participantToken = await this.generateAccessToken(
         roomName, 
         participantName,
         {
@@ -296,7 +296,7 @@ export class LiveKitService {
         }
       );
 
-      const interviewerToken = this.generateInterviewerToken(roomName, interviewConfig);
+      const interviewerToken = await this.generateInterviewerToken(roomName, interviewConfig);
 
       const roomData = {
         roomName,
