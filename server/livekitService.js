@@ -115,12 +115,17 @@ export class LiveKitService {
     });
 
     try {
+      console.log('[LiveKit] Generating AccessToken...');
+      console.log('[LiveKit] participantName:', participantName);
+      console.log('[LiveKit] metadata:', JSON.stringify(metadata, null, 2));
+      console.log('[LiveKit] apiKey:', this.apiKey ? '[SET]' :     '[MISSING]');
+      console.log('[LiveKit] apiSecret:', this.apiSecret ? '[SET]' : '[MISSING]');
       const at = new AccessToken(this.apiKey, this.apiSecret, {
         identity: participantName,
         name: participantName,
         metadata: JSON.stringify(metadata)
       });
-
+      console.log('[LiveKit] AccessToken created:', at);
       // Grant permissions for the participant
       at.addGrant({
         roomJoin: true,
@@ -135,6 +140,7 @@ export class LiveKitService {
       let token;
       try {
         token = at.toJwt();
+        console.log('[LiveKit] Generated JWT token:', token);
         console.log('[LiveKitService] Raw token from toJwt():', {
           type: typeof token,
           isString: typeof token === 'string',
