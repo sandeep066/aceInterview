@@ -115,6 +115,18 @@ export class LiveKitService {
     });
 
     try {
+      // Validate API key format - LiveKit API keys should start with 'API'
+      if (!this.apiKey.startsWith('API')) {
+        console.error('[LiveKitService] Invalid API key format - should start with "API"');
+        throw new Error('Invalid LiveKit API key format');
+      }
+
+      // Validate API secret length - should be a reasonable length
+      if (this.apiSecret.length < 32) {
+        console.error('[LiveKitService] API secret appears too short');
+        throw new Error('Invalid LiveKit API secret - too short');
+      }
+
       const at = new AccessToken(this.apiKey, this.apiSecret, {
         identity: participantName,
         name: participantName,
@@ -168,6 +180,18 @@ export class LiveKitService {
     });
 
     try {
+      // Validate API key format - LiveKit API keys should start with 'API'
+      if (!this.apiKey.startsWith('API')) {
+        console.error('[LiveKitService] Invalid API key format - should start with "API"');
+        throw new Error('Invalid LiveKit API key format');
+      }
+
+      // Validate API secret length - should be a reasonable length
+      if (this.apiSecret.length < 32) {
+        console.error('[LiveKitService] API secret appears too short');
+        throw new Error('Invalid LiveKit API secret - too short');
+      }
+
       const at = new AccessToken(this.apiKey, this.apiSecret, {
         identity: interviewerIdentity,
         name: 'AI Interviewer',
