@@ -32,9 +32,6 @@ interface VoiceInterviewScreenProps {
   onBackToConfig: () => void;
 }
 
-// Hardcoded LiveKit URL for testing
-const HARDCODED_LIVEKIT_URL = 'wss://test-3q4r3w5h.livekit.cloud';
-
 export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   config,
   onEndInterview,
@@ -62,13 +59,13 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     isSupported: speechSupported
   } = useSpeechRecognition();
 
-  // Create LiveKit props with hardcoded URL when we have a session
+  // Create LiveKit props using the backend-provided URL when we have a session
   const livekitProps = voiceSession && voiceSession.participantToken ? {
-    wsUrl: HARDCODED_LIVEKIT_URL, // Use hardcoded URL instead of session.wsUrl
+    wsUrl: voiceSession.wsUrl, // Use the URL from the backend that matches the token
     token: voiceSession.participantToken,
     onConnected: () => {
       setConnectionStatus('connected');
-      console.log('[VoiceInterview] ✅ Connected to LiveKit room with hardcoded URL');
+      console.log('[VoiceInterview] ✅ Connected to LiveKit room');
     },
     onDisconnected: () => {
       setConnectionStatus('disconnected');
@@ -85,7 +82,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     hasLivekitProps: !!livekitProps,
     livekitReady,
     connectionStatus,
-    hardcodedUrl: HARDCODED_LIVEKIT_URL
+    backendUrl: voiceSession?.wsUrl
   });
 
   // Only initialize LiveKit hook when we have valid props
@@ -155,16 +152,15 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   // Effect to handle LiveKit connection after session is set
   useEffect(() => {
     if (voiceSession && voiceSession.participantToken && !livekitReady) {
-      console.log('[VoiceInterview] Session ready, preparing LiveKit connection with hardcoded URL');
-      console.log('[VoiceInterview] Using hardcoded URL:', HARDCODED_LIVEKIT_URL);
-      console.log('[VoiceInterview] Original backend URL was:', voiceSession.wsUrl);
+      console.log('[VoiceInterview] Session ready, preparing LiveKit connection');
+      console.log('[VoiceInterview] Using backend URL:', voiceSession.wsUrl);
       setLivekitReady(true);
       
       // Small delay to ensure state is fully updated
       setTimeout(async () => {
         try {
           console.log('[VoiceInterview] ========== ATTEMPTING LIVEKIT CONNECTION ==========');
-          console.log('[VoiceInterview] Hardcoded URL:', `"${HARDCODED_LIVEKIT_URL}"`);
+          console.log('[VoiceInterview] Backend URL:', `"${voiceSession.wsUrl}"`);
           console.log('[VoiceInterview] Session token length:', voiceSession.participantToken?.length || 0);
           
           await connectLiveKit();
@@ -173,9 +169,9 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
           setStartTime(Date.now());
           setIsThinking(false);
           
-          console.log('[VoiceInterview] ✅ Voice interview started successfully with hardcoded URL');
+          console.log('[VoiceInterview] ✅ Voice interview started successfully');
         } catch (connectError) {
-          console.error('[VoiceInterview] ❌ Failed to connect to LiveKit with hardcoded URL:', connectError);
+          console.error('[VoiceInterview] ❌ Failed to connect to LiveKit:', connectError);
           setConnectionStatus('error');
           setIsThinking(false);
           alert(`Failed to connect to voice interview: ${connectError instanceof Error ? connectError.message : 'Unknown error'}`);
@@ -196,7 +192,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       setConnectionStatus('connecting');
       
       console.log('[VoiceInterview] ========== STARTING VOICE INTERVIEW ==========');
-      console.log('[VoiceInterview] Will use hardcoded URL:', HARDCODED_LIVEKIT_URL);
       
       // Start voice interview session
       const session = await VoiceInterviewService.startVoiceInterview(config, participantName);
@@ -207,7 +202,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       console.log('- sessionId:', session.sessionId);
       console.log('- roomName:', session.roomName);
       console.log('- backend wsUrl:', `"${session.wsUrl}"`);
-      console.log('- hardcoded wsUrl:', `"${HARDCODED_LIVEKIT_URL}"`);
       console.log('- participantToken:', session.participantToken ? 'Present' : 'Missing');
       console.log('- participantToken length:', session.participantToken?.length || 0);
       console.log('- firstQuestion:', session.firstQuestion);
@@ -382,7 +376,9 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                 {config.companyName && (
                   <p className="text-gray-600">Company: {config.companyName}</p>
                 )}
-                <p className="text-xs text-purple-600 mt-1">Using hardcoded LiveKit URL: {HARDCODED_LIVEKIT_URL}</p>
+                {voiceSession && (
+                  <p className="text-xs text-blue-600 mt-1">LiveKit URL: {voiceSession.wsUrl}</p>
+                )}
               </div>
               <div className="text-right">
                 <div className="flex items-center text-lg font-semibold text-blue-600 mb-2">
@@ -415,9 +411,11 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                   <div className="text-red-800 text-sm">
                     <p className="font-medium mb-1">Connection Error</p>
                     <p className="mb-2">{livekitError}</p>
-                    <p className="text-xs text-red-600">
-                      Using hardcoded URL: {HARDCODED_LIVEKIT_URL}
-                    </p>
+                    {voiceSession && (
+                      <p className="text-xs text-red-600">
+                        Using backend URL: {voiceSession.wsUrl}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -652,19 +650,16 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                       {livekitProps ? 'Yes' : 'No'}
                     </span>
                   </div>
-                  <div className="mt-3 pt-2 border-t border-blue-200">
-                    <div className="text-xs text-blue-600">
-                      <div><strong>Hardcoded URL:</strong> {HARDCODED_LIVEKIT_URL}</div>
-                      {voiceSession && (
-                        <>
-                          <div><strong>Session:</strong> {voiceSession.sessionId}</div>
-                          <div><strong>Room:</strong> {voiceSession.roomName}</div>
-                          <div><strong>Backend URL:</strong> "{voiceSession.wsUrl}"</div>
-                          <div><strong>Token Length:</strong> {voiceSession.participantToken?.length || 0}</div>
-                        </>
-                      )}
+                  {voiceSession && (
+                    <div className="mt-3 pt-2 border-t border-blue-200">
+                      <div className="text-xs text-blue-600">
+                        <div><strong>Session:</strong> {voiceSession.sessionId}</div>
+                        <div><strong>Room:</strong> {voiceSession.roomName}</div>
+                        <div><strong>Backend URL:</strong> "{voiceSession.wsUrl}"</div>
+                        <div><strong>Token Length:</strong> {voiceSession.participantToken?.length || 0}</div>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
