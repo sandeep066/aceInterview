@@ -101,6 +101,7 @@ export class APIService {
     try {
       console.log(`pmr URL ${url} :` );
       console.dir(`pmr DATA ${data}:` );
+      console.log('pmr Object', JSON.stringify(data, null, 2));
       return await apiClient.post(url, data);
       
     } catch (error) {
