@@ -103,26 +103,41 @@ export class LiveKitService {
    */
   generateAccessToken(roomName, participantName, metadata = {}) {
     if (!this.isConfigured()) {
+      console.error('[LiveKitService] Cannot generate token - not configured');
       throw new Error('LiveKit not configured');
     }
 
-    const at = new AccessToken(this.apiKey, this.apiSecret, {
-      identity: participantName,
-      name: participantName,
-      metadata: JSON.stringify(metadata)
+    console.log('[LiveKitService] Generating access token for:', {
+      roomName,
+      participantName,
+      apiKeyLength: this.apiKey?.length || 0,
+      apiSecretLength: this.apiSecret?.length || 0
     });
 
-    // Grant permissions for the participant
-    at.addGrant({
-      roomJoin: true,
-      room: roomName,
-      canPublish: true,
-      canSubscribe: true,
-      canPublishData: true,
-      canUpdateOwnMetadata: true,
-    });
+    try {
+      const at = new AccessToken(this.apiKey, this.apiSecret, {
+        identity: participantName,
+        name: participantName,
+        metadata: JSON.stringify(metadata)
+      });
 
-    return at.toJwt();
+      // Grant permissions for the participant
+      at.addGrant({
+        roomJoin: true,
+        room: roomName,
+        canPublish: true,
+        canSubscribe: true,
+        canPublishData: true,
+        canUpdateOwnMetadata: true,
+      });
+
+      const token = at.toJwt();
+      console.log('[LiveKitService] Token generated successfully, length:', token.length);
+      return token;
+    } catch (error) {
+      console.error('[LiveKitService] Error generating access token:', error);
+      throw new Error(`Failed to generate access token: ${error.message}`);
+    }
   }
 
   /**
@@ -130,33 +145,46 @@ export class LiveKitService {
    */
   generateInterviewerToken(roomName, interviewConfig) {
     if (!this.isConfigured()) {
+      console.error('[LiveKitService] Cannot generate interviewer token - not configured');
       throw new Error('LiveKit not configured');
     }
 
     const interviewerIdentity = `ai-interviewer-${Date.now()}`;
     
-    const at = new AccessToken(this.apiKey, this.apiSecret, {
-      identity: interviewerIdentity,
-      name: 'AI Interviewer',
-      metadata: JSON.stringify({
-        role: 'interviewer',
-        config: interviewConfig,
-        isBot: true
-      })
+    console.log('[LiveKitService] Generating interviewer token for:', {
+      roomName,
+      interviewerIdentity
     });
 
-    // Grant full permissions for the AI interviewer
-    at.addGrant({
-      roomJoin: true,
-      room: roomName,
-      canPublish: true,
-      canSubscribe: true,
-      canPublishData: true,
-      canUpdateOwnMetadata: true,
-      roomAdmin: true,
-    });
+    try {
+      const at = new AccessToken(this.apiKey, this.apiSecret, {
+        identity: interviewerIdentity,
+        name: 'AI Interviewer',
+        metadata: JSON.stringify({
+          role: 'interviewer',
+          config: interviewConfig,
+          isBot: true
+        })
+      });
 
-    return at.toJwt();
+      // Grant full permissions for the AI interviewer
+      at.addGrant({
+        roomJoin: true,
+        room: roomName,
+        canPublish: true,
+        canSubscribe: true,
+        canPublishData: true,
+        canUpdateOwnMetadata: true,
+        roomAdmin: true,
+      });
+
+      const token = at.toJwt();
+      console.log('[LiveKitService] Interviewer token generated successfully, length:', token.length);
+      return token;
+    } catch (error) {
+      console.error('[LiveKitService] Error generating interviewer token:', error);
+      throw new Error(`Failed to generate interviewer token: ${error.message}`);
+    }
   }
 
   /**
@@ -199,7 +227,7 @@ export class LiveKitService {
       return roomData;
     } catch (error) {
       console.error('[LiveKitService] Error creating interview room:', error);
-      throw new Error('Failed to create interview room');
+      throw new Error(`Failed to create interview room: ${error.message}`);
     }
   }
 
