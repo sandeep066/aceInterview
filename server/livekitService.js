@@ -107,12 +107,11 @@ export class LiveKitService {
       throw new Error('LiveKit not configured');
     }
 
-    console.log('[LiveKitService] Generating access token for:', {
-      roomName,
-      participantName,
-      apiKeyLength: this.apiKey?.length || 0,
-      apiSecretLength: this.apiSecret?.length || 0
-    });
+    console.log('[LiveKit] Generating AccessToken...');
+    console.log('[LiveKit] participantName:', participantName);
+    console.log('[LiveKit] metadata:', JSON.stringify(metadata, null, 2));
+    console.log('[LiveKit] apiKey:', this.apiKey ? '[SET]' : '[NOT SET]');
+    console.log('[LiveKit] apiSecret:', this.apiSecret ? '[SET]' : '[NOT SET]');
 
     try {
       const at = new AccessToken(this.apiKey, this.apiSecret, {
@@ -121,7 +120,7 @@ export class LiveKitService {
         metadata: JSON.stringify(metadata)
       });
 
-      // Grant permissions for the participant
+      // Grant permissions for the participant - use the correct method names
       at.addGrant({
         roomJoin: true,
         room: roomName,
@@ -131,8 +130,12 @@ export class LiveKitService {
         canUpdateOwnMetadata: true,
       });
 
+      console.log('[LiveKit] AccessToken created:', at);
+
       // Generate the token synchronously (not async)
       const token = at.toJwt();
+      
+      console.log('[LiveKit] Generated JWT token:', token);
       
       // Validate that the token is actually a string
       if (typeof token !== 'string' || token.length === 0) {
@@ -179,7 +182,7 @@ export class LiveKitService {
         })
       });
 
-      // Grant full permissions for the AI interviewer
+      // Grant full permissions for the AI interviewer - use the correct method names
       at.addGrant({
         roomJoin: true,
         room: roomName,
