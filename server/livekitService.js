@@ -132,6 +132,17 @@ export class LiveKitService {
       });
 
       const token = at.toJwt();
+      
+      // Validate that the token is actually a string
+      if (typeof token !== 'string' || token.length === 0) {
+        console.error('[LiveKitService] Generated token is not a valid string:', {
+          type: typeof token,
+          length: token?.length || 0,
+          token: token
+        });
+        throw new Error(`Invalid token generated: expected string, got ${typeof token} with length ${token?.length || 0}`);
+      }
+      
       console.log('[LiveKitService] Token generated successfully, length:', token.length);
       return token;
     } catch (error) {
@@ -179,6 +190,17 @@ export class LiveKitService {
       });
 
       const token = at.toJwt();
+      
+      // Validate that the token is actually a string
+      if (typeof token !== 'string' || token.length === 0) {
+        console.error('[LiveKitService] Generated interviewer token is not a valid string:', {
+          type: typeof token,
+          length: token?.length || 0,
+          token: token
+        });
+        throw new Error(`Invalid interviewer token generated: expected string, got ${typeof token} with length ${token?.length || 0}`);
+      }
+      
       console.log('[LiveKitService] Interviewer token generated successfully, length:', token.length);
       return token;
     } catch (error) {
