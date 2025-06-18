@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { InterviewConfig, AnalyticsData, InterviewResponse } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3002/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -99,7 +99,11 @@ export class APIService {
 
   static async post(url: string, data?: any): Promise<any> {
     try {
+      console.log(`pmr URL ${url}` );
+      console.dir(`pmr DATA ${data}` );
+      console.log('pmr Object', JSON.stringify(data, null, 2));
       return await apiClient.post(url, data);
+      
     } catch (error) {
       console.error(`POST ${url} failed:`, error);
       throw error;

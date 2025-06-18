@@ -41,7 +41,7 @@ export interface SessionStatus {
 }
 
 export class VoiceInterviewService {
-  private static readonly API_BASE = '/api/voice-interview';
+  private static readonly API_BASE = '/voice-interview';
 
   /**
    * Start a new voice interview session
@@ -175,7 +175,7 @@ export class VoiceInterviewService {
    */
   static async checkLiveKitConfig(): Promise<{ configured: boolean; wsUrl?: string }> {
     try {
-      const response = await APIService.get('/api/livekit/config');
+      const response = await APIService.get('/livekit/config');
       return response.data;
     } catch (error) {
       console.error('Error checking LiveKit config:', error);

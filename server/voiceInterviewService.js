@@ -12,8 +12,18 @@ export class VoiceInterviewService {
    */
   async startVoiceInterview(interviewConfig, participantName) {
     try {
+      console.log('[VoiceInterviewService] Starting voice interview...');
+      console.log('[VoiceInterviewService] LiveKit configured:', this.livekit.isConfigured());
+      console.log('[VoiceInterviewService] LiveKit wsUrl:', `"${this.livekit.wsUrl}"`);
+      
       // Create LiveKit room
       const roomData = await this.livekit.createInterviewRoom(interviewConfig, participantName);
+      
+      console.log('[VoiceInterviewService] Room data created:');
+      console.log('- roomName:', roomData.roomName);
+      console.log('- wsUrl:', typeof roomData.wsUrl, `"${roomData.wsUrl}"`);
+      console.log('- participantToken length:', roomData.participantToken?.length || 0);
+      console.log('- interviewerToken length:', roomData.interviewerToken?.length || 0);
       
       // Initialize interview session
       const sessionId = roomData.roomName;
@@ -37,18 +47,40 @@ export class VoiceInterviewService {
       this.activeInterviews.set(sessionId, interviewSession);
 
       // Generate first question
-      const firstQuestion = await this.generateNextQuestion(sessionId);
+      const firstQuestionData = await this.generateNextQuestion(sessionId);
       
-      return {
+      // Extract the question string properly
+      let firstQuestionText;
+      if (typeof firstQuestionData === 'string') {
+        firstQuestionText = firstQuestionData;
+      } else if (firstQuestionData && typeof firstQuestionData.question === 'string') {
+        firstQuestionText = firstQuestionData.question;
+      } else {
+        firstQuestionText = 'Welcome to your voice interview. Please wait for the first question.';
+      }
+      
+      console.log('[VoiceInterviewService] First question generated:', firstQuestionText);
+      
+      const responseData = {
         sessionId,
         roomName: roomData.roomName,
         wsUrl: roomData.wsUrl,
         participantToken: roomData.participantToken,
-        firstQuestion,
+        firstQuestion: firstQuestionText, // Now guaranteed to be a string
         config: interviewConfig
       };
+      
+      console.log('[VoiceInterviewService] Final response data:');
+      console.log('- sessionId:', responseData.sessionId);
+      console.log('- roomName:', responseData.roomName);
+      console.log('- wsUrl:', typeof responseData.wsUrl, `"${responseData.wsUrl}"`);
+      console.log('- participantToken length:', responseData.participantToken?.length || 0);
+      console.log('- firstQuestion type:', typeof responseData.firstQuestion);
+      console.log('- firstQuestion preview:', responseData.firstQuestion?.substring(0, 50) + '...');
+      
+      return responseData;
     } catch (error) {
-      console.error('Error starting voice interview:', error);
+      console.error('[VoiceInterviewService] Error starting voice interview:', error);
       throw new Error('Failed to start voice interview');
     }
   }
@@ -70,15 +102,16 @@ export class VoiceInterviewService {
         questionNumber: session.currentQuestionIndex + 1
       });
 
-      // Store the question
-      session.questions.push(question);
+      // Store the question - ensure it's a string
+      const questionText = typeof question === 'string' ? question : question?.question || 'Default question';
+      session.questions.push(questionText);
       session.currentQuestionIndex++;
 
       // Update session
       this.activeInterviews.set(sessionId, session);
 
       return {
-        question,
+        question: questionText,
         questionNumber: session.currentQuestionIndex,
         totalQuestions: this.calculateTotalQuestions(session.config.duration)
       };
