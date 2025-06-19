@@ -479,7 +479,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
 
               <div className="flex items-center space-x-3">
                 <div className="text-sm text-gray-600">
-                  Participants: {room?.participants.size || 0}
+                  Participants: {participantCount}
                 </div>
                 <Users className="w-5 h-5 text-gray-400" />
               </div>
