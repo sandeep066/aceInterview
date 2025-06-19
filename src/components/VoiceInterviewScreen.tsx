@@ -23,7 +23,8 @@ import {
   User,
   Zap,
   CheckCircle,
-  XCircle
+  XCircle,
+  Brain
 } from 'lucide-react';
 import { InterviewConfig } from '../types';
 import { AIInterviewSimulator } from '../utils/aiSimulator';
@@ -56,6 +57,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   const [livekitReady, setLivekitReady] = useState(false);
   const [conversationalMode, setConversationalMode] = useState(false);
   const [aiAgentEnabled, setAiAgentEnabled] = useState(false);
+  const [agentProvider, setAgentProvider] = useState<string>('google');
   const [conversationHistory, setConversationHistory] = useState<Array<{
     speaker: 'ai' | 'user';
     message: string;
@@ -169,16 +171,18 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       console.log('[VoiceInterview] Session ready, preparing LiveKit connection');
       console.log('[VoiceInterview] AI Agent enabled:', voiceSession.aiAgentEnabled);
       console.log('[VoiceInterview] Conversational mode:', voiceSession.conversationalMode);
+      console.log('[VoiceInterview] Agent provider:', voiceSession.agentProvider || 'google');
       
       setLivekitReady(true);
       setAiAgentEnabled(voiceSession.aiAgentEnabled || false);
       setConversationalMode(voiceSession.conversationalMode || false);
+      setAgentProvider(voiceSession.agentProvider || 'google');
       
       // Add initial greeting to conversation history if AI agent is enabled
       if (voiceSession.aiAgentEnabled) {
         setConversationHistory([{
           speaker: 'ai',
-          message: 'Hello! I\'m your AI interviewer. I\'ll be conducting your interview today. Please wait a moment while I prepare...',
+          message: 'Hello! I\'m your Google AI interviewer. I\'ll be conducting your interview today using advanced speech recognition and natural language processing. Please wait a moment while I prepare...',
           timestamp: Date.now(),
           type: 'greeting'
         }]);
@@ -197,22 +201,20 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
           
           console.log('[VoiceInterview] ✅ Voice interview started successfully');
           
-          // If conversational mode is enabled, start listening immediately
-          if (voiceSession.conversationalMode && speechSupported) {
+          // If conversational mode is enabled, the Google AI agent will handle the flow
+          if (voiceSession.conversationalMode) {
             setTimeout(() => {
-              startListening();
-              setUserSpeaking(true);
-              console.log('[VoiceInterview] 🎤 Started listening for conversational mode');
+              console.log('[VoiceInterview] 🎤 Google AI agent is managing the conversation flow');
               
-              // Add system message about continuous listening
+              // Add system message about Google AI management
               setConversationHistory(prev => [...prev, {
                 speaker: 'ai',
-                message: 'Great! I can hear you now. The interview will flow naturally - just speak when you\'re ready to respond. Are you ready to begin?',
+                message: 'Perfect! I\'m now ready to begin. The interview will flow naturally using Google\'s advanced speech technology. Are you ready to start?',
                 timestamp: Date.now(),
                 type: 'question'
               }]);
               
-            }, 3000); // Give more time for AI agent to initialize
+            }, 3000);
           }
           
         } catch (connectError) {
@@ -223,56 +225,20 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         }
       }, 1000);
     }
-  }, [voiceSession, livekitReady, connectLiveKit, speechSupported, startListening]);
+  }, [voiceSession, livekitReady, connectLiveKit]);
 
   // Listen for remote audio data (AI responses) in conversational mode
   useEffect(() => {
     if (conversationalMode && remoteAudioTracks.length > 0) {
-      console.log('[VoiceInterview] 🎵 AI audio received in conversational mode');
+      console.log('[VoiceInterview] 🎵 Google AI audio received in conversational mode');
       setIsAISpeaking(true);
       
-      // Stop user listening while AI is speaking
-      if (isListening) {
-        stopListening();
-        setUserSpeaking(false);
-      }
-      
-      // Resume listening after AI finishes (simulated delay)
+      // The Google AI agent manages its own listening state
       setTimeout(() => {
         setIsAISpeaking(false);
-        if (conversationalMode && speechSupported && isInterviewActive) {
-          startListening();
-          setUserSpeaking(true);
-        }
-      }, 3000); // Adjust based on actual audio duration
+      }, 3000);
     }
-  }, [conversationalMode, remoteAudioTracks, isListening, stopListening, startListening, speechSupported, isInterviewActive]);
-
-  // Handle transcript updates in conversational mode
-  useEffect(() => {
-    if (conversationalMode && transcript && transcript.length > 20) {
-      // Add user message to conversation history
-      setConversationHistory(prev => {
-        const lastMessage = prev[prev.length - 1];
-        if (lastMessage?.speaker === 'user' && Date.now() - lastMessage.timestamp < 10000) {
-          // Update the last user message if it's recent
-          return [...prev.slice(0, -1), {
-            ...lastMessage,
-            message: transcript,
-            timestamp: Date.now()
-          }];
-        } else {
-          // Add new user message
-          return [...prev, {
-            speaker: 'user',
-            message: transcript,
-            timestamp: Date.now(),
-            type: 'response'
-          }];
-        }
-      });
-    }
-  }, [conversationalMode, transcript]);
+  }, [conversationalMode, remoteAudioTracks]);
 
   const formatTime = (ms: number): string => {
     const minutes = Math.floor(ms / 60000);
@@ -285,9 +251,9 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       setIsThinking(true);
       setConnectionStatus('connecting');
       
-      console.log('[VoiceInterview] ========== STARTING VOICE INTERVIEW ==========');
+      console.log('[VoiceInterview] ========== STARTING GOOGLE AI VOICE INTERVIEW ==========');
       
-      // Start voice interview session with AI agent enabled
+      // Start voice interview session with Google AI agent enabled
       const session = await VoiceInterviewService.startVoiceInterview(config, participantName);
       console.log('[VoiceInterview] Session received from backend:', session);
       
@@ -301,21 +267,21 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       // Extract question string from the response object
       const firstQuestion = typeof session.firstQuestion === 'string' 
         ? session.firstQuestion 
-        : session.firstQuestion?.question || 'Welcome to your voice interview. Please wait for the first question.';
+        : session.firstQuestion?.question || 'Welcome to your Google AI voice interview. Please wait for the first question.';
       setCurrentQuestion(firstQuestion);
       
       // Set the session - this will trigger the useEffect above to connect to LiveKit
       setVoiceSession(session);
       
     } catch (error) {
-      console.error('[VoiceInterview] ❌ Error starting voice interview:', error);
+      console.error('[VoiceInterview] ❌ Error starting Google AI voice interview:', error);
       
       setConnectionStatus('error');
       setIsThinking(false);
       
       // Show user-friendly error message
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      alert(`Failed to start voice interview: ${errorMessage}`);
+      alert(`Failed to start Google AI voice interview: ${errorMessage}`);
     }
   };
 
@@ -354,16 +320,10 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
           await startAudio();
         }
         
-        // Resume listening in conversational mode
-        if (conversationalMode && speechSupported) {
-          startListening();
-          setUserSpeaking(true);
-        }
-        
         // Add resume message to conversation
         setConversationHistory(prev => [...prev, {
           speaker: 'ai',
-          message: 'Great! Let\'s continue with the interview. Where were we?',
+          message: 'Great! Let\'s continue with the interview. The Google AI agent is ready to proceed.',
           timestamp: Date.now(),
           type: 'question'
         }]);
@@ -389,7 +349,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         // Add completion message to conversation
         setConversationHistory(prev => [...prev, {
           speaker: 'ai',
-          message: 'Thank you for completing the interview! I\'ll now generate your detailed analytics.',
+          message: 'Thank you for completing the interview with Google AI! I\'ll now generate your detailed analytics using advanced AI analysis.',
           timestamp: Date.now(),
           type: 'feedback'
         }]);
@@ -399,69 +359,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     }
     
     onEndInterview(simulator);
-  };
-
-  const submitVoiceResponse = async () => {
-    if (!transcript.trim() || !voiceSession) return;
-
-    stopListening();
-    setUserSpeaking(false);
-    setIsThinking(true);
-    
-    try {
-      const result = await VoiceInterviewService.processVoiceResponse(
-        voiceSession.sessionId,
-        transcript.trim(),
-        {
-          audioLevel,
-          duration: elapsedTime,
-          confidence: 0.9
-        }
-      );
-      
-      // Update simulator with the response
-      await simulator.submitResponse(transcript.trim());
-      
-      if (result.isComplete) {
-        endInterview();
-      } else if (result.nextQuestion) {
-        // Extract question string from the response object
-        const nextQuestion = typeof result.nextQuestion === 'string'
-          ? result.nextQuestion
-          : result.nextQuestion?.question || '';
-        setCurrentQuestion(nextQuestion);
-        
-        // Add AI's next question to conversation
-        setConversationHistory(prev => [...prev, {
-          speaker: 'ai',
-          message: nextQuestion,
-          timestamp: Date.now(),
-          type: 'question'
-        }]);
-        
-        resetTranscript();
-      }
-    } catch (error) {
-      console.error('[VoiceInterview] Error submitting voice response:', error);
-    }
-    
-    setIsThinking(false);
-  };
-
-  const toggleMicrophone = async () => {
-    if (isListening) {
-      stopListening();
-      setUserSpeaking(false);
-      if (livekitProps) {
-        stopAudio();
-      }
-    } else {
-      if (livekitProps) {
-        await startAudio();
-      }
-      startListening();
-      setUserSpeaking(true);
-    }
   };
 
   const getConnectionStatusColor = () => {
@@ -495,11 +392,11 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
               <div>
                 <h1 className="text-2xl font-bold text-gray-900 flex items-center">
                   <Phone className="w-6 h-6 mr-2 text-blue-600" />
-                  Voice Interview - {config.style.charAt(0).toUpperCase() + config.style.slice(1).replace('-', ' ')}
+                  Google AI Voice Interview - {config.style.charAt(0).toUpperCase() + config.style.slice(1).replace('-', ' ')}
                   {aiAgentEnabled && (
                     <span className="ml-3 inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                      <Bot className="w-3 h-3 mr-1" />
-                      AI Agent
+                      <Brain className="w-3 h-3 mr-1" />
+                      Google AI
                     </span>
                   )}
                   {conversationalMode && (
@@ -513,6 +410,9 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                 {config.companyName && (
                   <p className="text-gray-600">Company: {config.companyName}</p>
                 )}
+                <p className="text-xs text-blue-600 mt-1">
+                  Powered by Google Gemini AI, Speech-to-Text, and Text-to-Speech
+                </p>
               </div>
               <div className="text-right">
                 <div className="flex items-center text-lg font-semibold text-blue-600 mb-2">
@@ -555,19 +455,33 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
               </div>
             )}
 
-            {/* AI Agent Status */}
+            {/* Google AI Agent Status */}
             {aiAgentEnabled && (
               <div className="mb-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
                 <div className="flex items-start">
-                  <Bot className="w-5 h-5 text-purple-600 mr-3 mt-0.5 flex-shrink-0" />
+                  <Brain className="w-5 h-5 text-purple-600 mr-3 mt-0.5 flex-shrink-0" />
                   <div className="text-purple-800 text-sm">
-                    <p className="font-medium mb-1">AI Agent Active</p>
+                    <p className="font-medium mb-1">Google AI Agent Active</p>
                     <p className="mb-2">
-                      Your AI interviewer is ready for continuous conversation. 
-                      {conversationalMode ? ' The interview will flow naturally - just speak when ready!' : ' Use the microphone button to respond.'}
+                      Your Google AI interviewer is ready for continuous conversation using advanced speech recognition and natural language processing.
+                      {conversationalMode ? ' The interview will flow naturally with intelligent turn-taking!' : ' Use the microphone button to respond.'}
                     </p>
+                    <div className="flex items-center space-x-4 text-xs">
+                      <span className="flex items-center">
+                        <CheckCircle className="w-3 h-3 mr-1 text-green-600" />
+                        Gemini AI
+                      </span>
+                      <span className="flex items-center">
+                        <CheckCircle className="w-3 h-3 mr-1 text-green-600" />
+                        Speech-to-Text
+                      </span>
+                      <span className="flex items-center">
+                        <CheckCircle className="w-3 h-3 mr-1 text-green-600" />
+                        Text-to-Speech
+                      </span>
+                    </div>
                     {voiceSession?.agentError && (
-                      <p className="text-xs text-purple-600">
+                      <p className="text-xs text-purple-600 mt-2">
                         Note: {voiceSession.agentError}
                       </p>
                     )}
@@ -606,9 +520,9 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                     {isThinking ? (
                       <Loader className="w-4 h-4 mr-2 animate-spin" />
                     ) : (
-                      <Phone className="w-4 h-4 mr-2" />
+                      <Brain className="w-4 h-4 mr-2" />
                     )}
-                    {startTime ? 'Resume Voice Interview' : 'Start Voice Interview'}
+                    {startTime ? 'Resume Google AI Interview' : 'Start Google AI Interview'}
                   </button>
                 ) : (
                   <button
@@ -634,15 +548,15 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                 <div className="flex items-center space-x-2">
                   {isAISpeaking && (
                     <div className="flex items-center text-purple-600 text-sm">
-                      <Bot className="w-4 h-4 mr-1" />
-                      <span>AI Speaking</span>
+                      <Brain className="w-4 h-4 mr-1" />
+                      <span>Google AI Speaking</span>
                       <div className="w-2 h-2 bg-purple-600 rounded-full animate-pulse ml-2"></div>
                     </div>
                   )}
-                  {userSpeaking && (
+                  {conversationalMode && !isAISpeaking && (
                     <div className="flex items-center text-green-600 text-sm">
                       <User className="w-4 h-4 mr-1" />
-                      <span>Listening</span>
+                      <span>AI Listening</span>
                       <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse ml-2"></div>
                     </div>
                   )}
@@ -664,7 +578,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                 <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                     <MessageCircle className="w-5 h-5 mr-2 text-purple-600" />
-                    Live Conversation
+                    Live Google AI Conversation
                     <span className="ml-2 text-sm text-green-600">(Real-time)</span>
                   </h3>
                   
@@ -676,21 +590,21 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                       <div key={index} className={`flex ${message.speaker === 'ai' ? 'justify-start' : 'justify-end'}`}>
                         <div className={`max-w-xs lg:max-w-md px-4 py-3 rounded-lg shadow-sm ${
                           message.speaker === 'ai' 
-                            ? 'bg-blue-100 text-blue-900 border-l-4 border-blue-500' 
+                            ? 'bg-purple-100 text-purple-900 border-l-4 border-purple-500' 
                             : 'bg-green-100 text-green-900 border-r-4 border-green-500'
                         }`}>
                           <div className="flex items-center mb-2">
                             {message.speaker === 'ai' ? (
-                              <Bot className="w-4 h-4 mr-2" />
+                              <Brain className="w-4 h-4 mr-2" />
                             ) : (
                               <User className="w-4 h-4 mr-2" />
                             )}
                             <span className="text-xs font-medium">
-                              {message.speaker === 'ai' ? 'AI Interviewer' : 'You'}
+                              {message.speaker === 'ai' ? 'Google AI Interviewer' : 'You'}
                             </span>
                             {message.type && (
                               <span className={`ml-2 text-xs px-2 py-1 rounded-full ${
-                                message.type === 'question' ? 'bg-blue-200 text-blue-800' :
+                                message.type === 'question' ? 'bg-purple-200 text-purple-800' :
                                 message.type === 'response' ? 'bg-green-200 text-green-800' :
                                 message.type === 'feedback' ? 'bg-yellow-200 text-yellow-800' :
                                 'bg-gray-200 text-gray-800'
@@ -713,7 +627,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                         <div className="max-w-xs lg:max-w-md px-4 py-3 rounded-lg bg-green-50 text-green-800 border-r-4 border-green-300 opacity-75">
                           <div className="flex items-center mb-2">
                             <User className="w-4 h-4 mr-2" />
-                            <span className="text-xs font-medium">You (typing...)</span>
+                            <span className="text-xs font-medium">You (speaking...)</span>
                             <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse ml-2"></div>
                           </div>
                           <p className="text-sm leading-relaxed italic">{transcript}</p>
@@ -728,37 +642,37 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
               {!conversationalMode && (
                 <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
                   <div className="flex items-center mb-4">
-                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center mr-4">
-                      <MessageCircle className="w-6 h-6 text-white" />
+                    <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center mr-4">
+                      <Brain className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900">AI Voice Interviewer</h3>
+                      <h3 className="text-lg font-semibold text-gray-900">Google AI Voice Interviewer</h3>
                       <p className="text-sm text-gray-600">
-                        Real-time voice conversation powered by LiveKit
+                        Real-time voice conversation powered by Google Cloud AI
                       </p>
                     </div>
                   </div>
 
-                  <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 min-h-[200px]">
+                  <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-6 min-h-[200px]">
                     {isThinking ? (
                       <div className="flex items-center justify-center h-full">
-                        <Loader className="w-6 h-6 text-blue-600 animate-spin mr-3" />
-                        <span className="text-gray-600">AI is processing your response...</span>
+                        <Loader className="w-6 h-6 text-purple-600 animate-spin mr-3" />
+                        <span className="text-gray-600">Google AI is processing your response...</span>
                       </div>
                     ) : currentQuestion ? (
                       <div>
                         <p className="text-lg text-gray-800 leading-relaxed mb-4">{currentQuestion}</p>
                         {isInterviewActive && connectionStatus === 'connected' && (
-                          <div className="flex items-center text-sm text-blue-600">
-                            <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse mr-2"></div>
-                            Voice interview active - speak your response
+                          <div className="flex items-center text-sm text-purple-600">
+                            <div className="w-2 h-2 bg-purple-600 rounded-full animate-pulse mr-2"></div>
+                            Google AI voice interview active - speak your response
                           </div>
                         )}
                       </div>
                     ) : (
                       <div className="flex items-center justify-center h-full text-gray-500">
-                        <Phone className="w-8 h-8 mr-3" />
-                        <span>Click "Start Voice Interview" to begin</span>
+                        <Brain className="w-8 h-8 mr-3" />
+                        <span>Click "Start Google AI Interview" to begin</span>
                       </div>
                     )}
                   </div>
@@ -771,7 +685,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                   <Mic className="w-5 h-5 mr-2 text-blue-600" />
                   Voice Response
                   {conversationalMode && (
-                    <span className="ml-2 text-sm text-green-600">(Auto-listening)</span>
+                    <span className="ml-2 text-sm text-green-600">(Google AI Managed)</span>
                   )}
                 </h3>
                 
@@ -779,12 +693,12 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                   {/* Live Transcript */}
                   <div className="bg-gray-50 rounded-xl p-4 min-h-[120px]">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-700">Live Transcript</span>
+                      <span className="text-sm font-medium text-gray-700">Live Transcript (Google Speech-to-Text)</span>
                       <div className="flex items-center space-x-2">
-                        {userSpeaking && (
-                          <div className="flex items-center text-sm text-green-600">
-                            <CheckCircle className="w-4 h-4 mr-1" />
-                            Listening
+                        {conversationalMode && (
+                          <div className="flex items-center text-sm text-purple-600">
+                            <Brain className="w-4 h-4 mr-1" />
+                            AI Managed
                           </div>
                         )}
                         {isAISpeaking && (
@@ -793,18 +707,18 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                             AI Speaking
                           </div>
                         )}
-                        {!userSpeaking && !isAISpeaking && isInterviewActive && (
+                        {!isAISpeaking && !conversationalMode && isInterviewActive && (
                           <div className="flex items-center text-sm text-gray-500">
-                            <XCircle className="w-4 h-4 mr-1" />
-                            Idle
+                            <Mic className="w-4 h-4 mr-1" />
+                            Ready
                           </div>
                         )}
                       </div>
                     </div>
                     <p className="text-gray-800">
                       {transcript || (conversationalMode 
-                        ? 'Speak naturally - your words will appear here in real-time...' 
-                        : 'Your speech will appear here in real-time...')}
+                        ? 'Google AI is managing the conversation flow. Your speech will be processed automatically...' 
+                        : 'Your speech will appear here in real-time using Google Speech-to-Text...')}
                     </p>
                   </div>
 
@@ -814,7 +728,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                       <Volume2 className="w-5 h-5 text-gray-600" />
                       <div className="flex-1 bg-gray-200 rounded-full h-2">
                         <div
-                          className="bg-gradient-to-r from-green-400 to-blue-500 h-2 rounded-full transition-all duration-100"
+                          className="bg-gradient-to-r from-green-400 to-purple-500 h-2 rounded-full transition-all duration-100"
                           style={{ width: `${audioLevel}%` }}
                         />
                       </div>
@@ -825,39 +739,18 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                   {/* Voice Controls */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      {speechSupported && !conversationalMode && (
-                        <button
-                          onClick={toggleMicrophone}
-                          disabled={!isInterviewActive || connectionStatus !== 'connected'}
-                          className={`p-4 rounded-xl transition-all ${
-                            isListening
-                              ? 'bg-red-100 text-red-600 animate-pulse'
-                              : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
-                        >
-                          {isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
-                        </button>
-                      )}
-                      
                       <div className="text-sm text-gray-600">
                         {conversationalMode 
-                          ? (userSpeaking ? 'Continuous listening active' : 'AI is speaking - please wait')
-                          : isListening 
-                            ? 'Click to stop recording' 
-                            : 'Click to start recording'
+                          ? 'Google AI is managing the conversation flow automatically'
+                          : 'Manual voice control mode'
                         }
                       </div>
                     </div>
 
-                    {!conversationalMode && (
-                      <button
-                        onClick={submitVoiceResponse}
-                        disabled={!isInterviewActive || !transcript.trim() || isThinking}
-                        className="inline-flex items-center px-6 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                      >
-                        <Send className="w-4 h-4 mr-2" />
-                        Submit Response
-                      </button>
+                    {conversationalMode && (
+                      <div className="text-sm text-purple-600 font-medium">
+                        Powered by Google Cloud AI
+                      </div>
                     )}
                   </div>
                 </div>
@@ -877,7 +770,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                   ref={notesRef}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Jot down key points, thoughts, or reminders during the voice interview..."
+                  placeholder="Jot down key points, thoughts, or reminders during the Google AI voice interview..."
                   className="w-full h-48 px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors"
                 />
                 
@@ -888,7 +781,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
 
               {/* Connection & Status Info */}
               <div className="bg-white rounded-2xl shadow-lg p-6">
-                <h4 className="font-medium text-gray-900 mb-4">Connection Status</h4>
+                <h4 className="font-medium text-gray-900 mb-4">Google AI Status</h4>
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between items-center">
                     <span className="text-gray-700">LiveKit:</span>
@@ -905,9 +798,9 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-700">AI Agent:</span>
+                    <span className="text-gray-700">Google AI Agent:</span>
                     <span className={`flex items-center ${aiAgentEnabled ? 'text-green-600' : 'text-gray-600'}`}>
-                      {aiAgentEnabled ? <Bot className="w-4 h-4 mr-1" /> : <XCircle className="w-4 h-4 mr-1" />}
+                      {aiAgentEnabled ? <Brain className="w-4 h-4 mr-1" /> : <XCircle className="w-4 h-4 mr-1" />}
                       {aiAgentEnabled ? 'Active' : 'Disabled'}
                     </span>
                   </div>
@@ -916,6 +809,12 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                     <span className={`flex items-center ${conversationalMode ? 'text-green-600' : 'text-blue-600'}`}>
                       {conversationalMode ? <Zap className="w-4 h-4 mr-1" /> : <Mic className="w-4 h-4 mr-1" />}
                       {conversationalMode ? 'Conversational' : 'Manual'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-700">Provider:</span>
+                    <span className="text-purple-600 font-medium">
+                      Google Cloud AI
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -932,6 +831,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                       <div><strong>Session:</strong> {voiceSession.sessionId}</div>
                       <div><strong>Room:</strong> {voiceSession.roomName}</div>
                       <div><strong>Token Length:</strong> {voiceSession.participantToken?.length || 0}</div>
+                      <div><strong>AI Provider:</strong> Google Cloud</div>
                     </div>
                   </div>
                 )}
