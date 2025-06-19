@@ -108,7 +108,7 @@ export class LLMQuestionGenerator {
       return text;
       
     } catch (error) {
-      console.error('[Gemini 1.5 Pro] API call failed:', error);
+      console.error('[Gemini 2.5 Flash] API call failed:', error);
       throw new Error(`Gemini API error: ${error.message}`);
     }
   }
