@@ -98,13 +98,13 @@ export class LLMQuestionGenerator {
       
       fullPrompt += '\nAssistant:';
 
-      console.log(`[Gemini 1.5 Pro] Sending request with prompt length: ${fullPrompt.length}`);
+      console.log(`[Gemini 2.5 Flash] Sending request with prompt length: ${fullPrompt.length}`);
       
       const result = await this.geminiModel.generateContent(fullPrompt);
       const response = await result.response;
       const text = response.text();
       
-      console.log(`[Gemini 1.5 Pro] Received response with length: ${text.length}`);
+      console.log(`[Gemini 2.5 Flash] Received response with length: ${text.length}`);
       return text;
       
     } catch (error) {
