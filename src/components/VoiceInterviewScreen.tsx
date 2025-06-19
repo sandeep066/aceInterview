@@ -360,6 +360,9 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
 
   const progress = simulator.getProgress();
 
+  // Safe participant count - this was the source of the error
+  const participantCount = room?.participants?.size || 0;
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
       <div className="container mx-auto px-4 py-6">
