@@ -38,6 +38,7 @@ export interface AnalyticsRequest {
 export class APIService {
   static async generateQuestion(request: QuestionGenerationRequest): Promise<string> {
     try {
+      console.log(`pmr base URL ${baseURL}` );
       const response = await apiClient.post('/generate-question', request);
       return response.data.question;
     } catch (error) {
