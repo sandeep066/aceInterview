@@ -10,12 +10,35 @@ export class LiveKitService {
     console.log('[LiveKitService] Environment Variables:');
     console.log('- API_KEY:', this.apiKey ? 'Set' : 'Not set');
     console.log('- API_SECRET:', this.apiSecret ? 'Set' : 'Not set');
-    console.log('- WS_URL:', this.wsUrl ? `"${this.wsUrl}"` : 'Not set');
+    console.log('- WS_URL (raw):', this.wsUrl ? `"${this.wsUrl}"` : 'Not set');
     
-    // Clean the WebSocket URL but don't invalidate it
+    // Robust cleaning of the WebSocket URL
     if (this.wsUrl) {
-      this.wsUrl = this.wsUrl.trim().replace(/['"]/g, '');
-      console.log('- WS_URL (cleaned):', `"${this.wsUrl}"`);
+      const originalUrl = this.wsUrl;
+      
+      try {
+        // First, try to parse the URL to get a canonical clean URL
+        const urlObj = new URL(this.wsUrl.trim().replace(/['"]/g, ''));
+        this.wsUrl = urlObj.toString();
+        console.log('- WS_URL (cleaned via URL constructor):', `"${this.wsUrl}"`);
+      } catch (parseError) {
+        console.warn('- URL parsing failed, falling back to aggressive string cleaning:', parseError.message);
+        
+        // Fall back to aggressive string replacement
+        this.wsUrl = this.wsUrl
+          .trim()
+          .replace(/^['"]|['"]$/g, '') // Remove leading/trailing quotes
+          .replace(/['"\\]/g, ''); // Remove any remaining quotes or backslashes
+        
+        console.log('- WS_URL (cleaned via string replacement):', `"${this.wsUrl}"`);
+      }
+      
+      // Final validation
+      if (originalUrl !== this.wsUrl) {
+        console.log('- URL was modified during cleaning');
+        console.log('- Original:', `"${originalUrl}"`);
+        console.log('- Cleaned:', `"${this.wsUrl}"`);
+      }
     }
     
     if (!this.apiKey || !this.apiSecret || !this.wsUrl) {
