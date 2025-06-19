@@ -653,6 +653,12 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                       {livekitProps ? 'Yes' : 'No'}
                     </span>
                   </div>
+                  <div className="flex justify-between">
+                    <span className="text-blue-700">Participants:</span>
+                    <span className="text-blue-900">
+                      {participantCount}
+                    </span>
+                  </div>
                   {voiceSession && (
                     <div className="mt-3 pt-2 border-t border-blue-200">
                       <div className="text-xs text-blue-600">
