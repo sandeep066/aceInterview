@@ -18,7 +18,7 @@ export class LLMQuestionGenerator {
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       this.geminiAI = new GoogleGenerativeAI(this.apiKey);
       this.geminiModel = this.geminiAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-      console.log('✅ Gemini 1.5 Pro initialized successfully');
+      console.log('✅ Gemini 2.5 Flash initialized successfully');
     } catch (error) {
       console.error('❌ Failed to initialize Gemini AI:', error);
       this.geminiAI = null;
