@@ -4,6 +4,18 @@ export class LLMQuestionGenerator {
     this.provider = process.env.LLM_PROVIDER || 'openai'; // 'openai', 'anthropic', or 'gemini'
     this.baseURL = this.getBaseURL();
     
+    // Debug API key loading
+    console.log('=== API KEY DEBUGGING ===');
+    console.log(`[LLMService] Provider: ${this.provider}`);
+    console.log(`[LLMService] API Key (first 5 chars): ${this.apiKey ? this.apiKey.substring(0, 5) : 'Not Set'}`);
+    console.log(`[LLMService] API Key length: ${this.apiKey ? this.apiKey.length : 0}`);
+    console.log(`[LLMService] Raw process.env.GEMINI_API_KEY (first 5 chars): ${process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.substring(0, 5) : 'Not Set'}`);
+    console.log(`[LLMService] Raw process.env.GEMINI_API_KEY length: ${process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.length : 0}`);
+    console.log(`[LLMService] Raw process.env.OPENAI_API_KEY (first 5 chars): ${process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.substring(0, 5) : 'Not Set'}`);
+    console.log(`[LLMService] Raw process.env.ANTHROPIC_API_KEY (first 5 chars): ${process.env.ANTHROPIC_API_KEY ? process.env.ANTHROPIC_API_KEY.substring(0, 5) : 'Not Set'}`);
+    console.log(`[LLMService] Raw process.env.LLM_PROVIDER: ${process.env.LLM_PROVIDER || 'Not Set'}`);
+    console.log('=== END API KEY DEBUGGING ===');
+    
     // Initialize Gemini if using Google's API
     if (this.provider === 'gemini') {
       this.initializeGemini();
@@ -15,12 +27,20 @@ export class LLMQuestionGenerator {
 
   async initializeGemini() {
     try {
+      console.log('[LLMService] Initializing Gemini with API key...');
+      console.log(`[LLMService] Using API key (first 5 chars): ${this.apiKey ? this.apiKey.substring(0, 5) : 'Not Set'}`);
+      
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       this.geminiAI = new GoogleGenerativeAI(this.apiKey);
       this.geminiModel = this.geminiAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
       console.log('✅ Gemini 2.5 Flash initialized successfully');
     } catch (error) {
       console.error('❌ Failed to initialize Gemini AI:', error);
+      console.error('❌ Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
       this.geminiAI = null;
       this.geminiModel = null;
     }
@@ -50,7 +70,7 @@ export class LLMQuestionGenerator {
       case 'anthropic':
         return 'https://api.anthropic.com/v1/messages';
       case 'gemini':
-        return 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent';
+        return 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
       case 'openai':
       default:
         return 'https://api.openai.com/v1/chat/completions';
@@ -80,6 +100,9 @@ export class LLMQuestionGenerator {
     }
 
     try {
+      console.log('[LLMService] Making Gemini API call...');
+      console.log(`[LLMService] API Key being used (first 5 chars): ${this.apiKey ? this.apiKey.substring(0, 5) : 'Not Set'}`);
+      
       // Combine system prompt and messages for Gemini
       let fullPrompt = '';
       
@@ -109,6 +132,11 @@ export class LLMQuestionGenerator {
       
     } catch (error) {
       console.error('[Gemini 2.5 Flash] API call failed:', error);
+      console.error('[Gemini 2.5 Flash] Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
       throw new Error(`Gemini API error: ${error.message}`);
     }
   }
