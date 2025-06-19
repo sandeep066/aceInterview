@@ -21,7 +21,9 @@ import {
   Signal,
   Bot,
   User,
-  Zap
+  Zap,
+  CheckCircle,
+  XCircle
 } from 'lucide-react';
 import { InterviewConfig } from '../types';
 import { AIInterviewSimulator } from '../utils/aiSimulator';
@@ -58,7 +60,10 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     speaker: 'ai' | 'user';
     message: string;
     timestamp: number;
+    type?: 'greeting' | 'question' | 'response' | 'feedback';
   }>>([]);
+  const [isAISpeaking, setIsAISpeaking] = useState(false);
+  const [userSpeaking, setUserSpeaking] = useState(false);
   
   const {
     isListening,
@@ -71,7 +76,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
 
   // Create LiveKit props using the backend-provided URL when we have a session
   const livekitProps = voiceSession && voiceSession.participantToken ? {
-    wsUrl: voiceSession.wsUrl, // Use the URL from the backend that matches the token
+    wsUrl: voiceSession.wsUrl,
     token: voiceSession.participantToken,
     onConnected: () => {
       setConnectionStatus('connected');
@@ -86,16 +91,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       console.error('[VoiceInterview] ❌ LiveKit error:', error);
     }
   } : null;
-
-  console.log('[VoiceInterview] Component render state:', {
-    hasVoiceSession: !!voiceSession,
-    hasLivekitProps: !!livekitProps,
-    livekitReady,
-    connectionStatus,
-    conversationalMode,
-    aiAgentEnabled,
-    backendUrl: voiceSession?.wsUrl
-  });
 
   // Only initialize LiveKit hook when we have valid props
   const {
@@ -119,6 +114,14 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   });
 
   const notesRef = useRef<HTMLTextAreaElement>(null);
+  const conversationRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll conversation to bottom
+  useEffect(() => {
+    if (conversationRef.current) {
+      conversationRef.current.scrollTop = conversationRef.current.scrollHeight;
+    }
+  }, [conversationHistory]);
 
   // Timer effect
   useEffect(() => {
@@ -135,7 +138,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   useEffect(() => {
     if (localAudioTrack) {
       const analyzeAudio = () => {
-        // Simulate audio level for demo - in real implementation you'd analyze the audio stream
         setAudioLevel(Math.random() * 100);
       };
       
@@ -165,7 +167,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   useEffect(() => {
     if (voiceSession && voiceSession.participantToken && !livekitReady) {
       console.log('[VoiceInterview] Session ready, preparing LiveKit connection');
-      console.log('[VoiceInterview] Using backend URL:', voiceSession.wsUrl);
       console.log('[VoiceInterview] AI Agent enabled:', voiceSession.aiAgentEnabled);
       console.log('[VoiceInterview] Conversational mode:', voiceSession.conversationalMode);
       
@@ -177,8 +178,9 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       if (voiceSession.aiAgentEnabled) {
         setConversationHistory([{
           speaker: 'ai',
-          message: 'Hello! I\'m your AI interviewer. I\'ll be conducting your interview today. Are you ready to begin?',
-          timestamp: Date.now()
+          message: 'Hello! I\'m your AI interviewer. I\'ll be conducting your interview today. Please wait a moment while I prepare...',
+          timestamp: Date.now(),
+          type: 'greeting'
         }]);
       }
       
@@ -186,8 +188,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       setTimeout(async () => {
         try {
           console.log('[VoiceInterview] ========== ATTEMPTING LIVEKIT CONNECTION ==========');
-          console.log('[VoiceInterview] Backend URL:', `"${voiceSession.wsUrl}"`);
-          console.log('[VoiceInterview] Session token length:', voiceSession.participantToken?.length || 0);
           
           await connectLiveKit();
           
@@ -201,8 +201,18 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
           if (voiceSession.conversationalMode && speechSupported) {
             setTimeout(() => {
               startListening();
+              setUserSpeaking(true);
               console.log('[VoiceInterview] 🎤 Started listening for conversational mode');
-            }, 2000); // Give a moment for connection to stabilize
+              
+              // Add system message about continuous listening
+              setConversationHistory(prev => [...prev, {
+                speaker: 'ai',
+                message: 'Great! I can hear you now. The interview will flow naturally - just speak when you\'re ready to respond. Are you ready to begin?',
+                timestamp: Date.now(),
+                type: 'question'
+              }]);
+              
+            }, 3000); // Give more time for AI agent to initialize
           }
           
         } catch (connectError) {
@@ -211,7 +221,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
           setIsThinking(false);
           alert(`Failed to connect to voice interview: ${connectError instanceof Error ? connectError.message : 'Unknown error'}`);
         }
-      }, 200);
+      }, 1000);
     }
   }, [voiceSession, livekitReady, connectLiveKit, speechSupported, startListening]);
 
@@ -219,27 +229,32 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   useEffect(() => {
     if (conversationalMode && remoteAudioTracks.length > 0) {
       console.log('[VoiceInterview] 🎵 AI audio received in conversational mode');
+      setIsAISpeaking(true);
       
-      // Add AI response to conversation history
-      // Note: In a real implementation, you'd need to transcribe the audio
-      // For now, we'll simulate this
-      const aiMessage = "AI is speaking..."; // This would be the transcribed audio
+      // Stop user listening while AI is speaking
+      if (isListening) {
+        stopListening();
+        setUserSpeaking(false);
+      }
       
-      setConversationHistory(prev => [...prev, {
-        speaker: 'ai',
-        message: aiMessage,
-        timestamp: Date.now()
-      }]);
+      // Resume listening after AI finishes (simulated delay)
+      setTimeout(() => {
+        setIsAISpeaking(false);
+        if (conversationalMode && speechSupported && isInterviewActive) {
+          startListening();
+          setUserSpeaking(true);
+        }
+      }, 3000); // Adjust based on actual audio duration
     }
-  }, [conversationalMode, remoteAudioTracks]);
+  }, [conversationalMode, remoteAudioTracks, isListening, stopListening, startListening, speechSupported, isInterviewActive]);
 
   // Handle transcript updates in conversational mode
   useEffect(() => {
-    if (conversationalMode && transcript && transcript.length > 10) {
+    if (conversationalMode && transcript && transcript.length > 20) {
       // Add user message to conversation history
       setConversationHistory(prev => {
         const lastMessage = prev[prev.length - 1];
-        if (lastMessage?.speaker === 'user' && Date.now() - lastMessage.timestamp < 5000) {
+        if (lastMessage?.speaker === 'user' && Date.now() - lastMessage.timestamp < 10000) {
           // Update the last user message if it's recent
           return [...prev.slice(0, -1), {
             ...lastMessage,
@@ -251,7 +266,8 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
           return [...prev, {
             speaker: 'user',
             message: transcript,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            type: 'response'
           }];
         }
       });
@@ -275,17 +291,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       const session = await VoiceInterviewService.startVoiceInterview(config, participantName);
       console.log('[VoiceInterview] Session received from backend:', session);
       
-      // Detailed logging for debugging
-      console.log('[VoiceInterview] Session details:');
-      console.log('- sessionId:', session.sessionId);
-      console.log('- roomName:', session.roomName);
-      console.log('- backend wsUrl:', `"${session.wsUrl}"`);
-      console.log('- participantToken:', session.participantToken ? 'Present' : 'Missing');
-      console.log('- participantToken length:', session.participantToken?.length || 0);
-      console.log('- firstQuestion:', session.firstQuestion);
-      console.log('- aiAgentEnabled:', session.aiAgentEnabled);
-      console.log('- conversationalMode:', session.conversationalMode);
-      
       // Validate session data before proceeding
       if (!session.participantToken) {
         throw new Error('No participant token received from backend');
@@ -304,11 +309,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       
     } catch (error) {
       console.error('[VoiceInterview] ❌ Error starting voice interview:', error);
-      console.error('[VoiceInterview] Error details:', {
-        name: error instanceof Error ? error.name : 'Unknown',
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : 'No stack trace'
-      });
       
       setConnectionStatus('error');
       setIsThinking(false);
@@ -322,6 +322,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   const pauseInterview = async () => {
     setIsInterviewActive(false);
     stopListening();
+    setUserSpeaking(false);
     if (livekitProps) {
       stopAudio();
     }
@@ -329,6 +330,14 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     if (voiceSession) {
       try {
         await VoiceInterviewService.pauseInterview(voiceSession.sessionId);
+        
+        // Add pause message to conversation
+        setConversationHistory(prev => [...prev, {
+          speaker: 'ai',
+          message: 'Interview paused. Click resume when you\'re ready to continue.',
+          timestamp: Date.now(),
+          type: 'feedback'
+        }]);
       } catch (error) {
         console.error('[VoiceInterview] Error pausing interview:', error);
       }
@@ -348,7 +357,16 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         // Resume listening in conversational mode
         if (conversationalMode && speechSupported) {
           startListening();
+          setUserSpeaking(true);
         }
+        
+        // Add resume message to conversation
+        setConversationHistory(prev => [...prev, {
+          speaker: 'ai',
+          message: 'Great! Let\'s continue with the interview. Where were we?',
+          timestamp: Date.now(),
+          type: 'question'
+        }]);
       } catch (error) {
         console.error('[VoiceInterview] Error resuming interview:', error);
       }
@@ -358,6 +376,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   const endInterview = async () => {
     setIsInterviewActive(false);
     stopListening();
+    setUserSpeaking(false);
     if (livekitProps) {
       stopAudio();
       disconnectLiveKit();
@@ -366,6 +385,14 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     if (voiceSession) {
       try {
         await VoiceInterviewService.endInterview(voiceSession.sessionId);
+        
+        // Add completion message to conversation
+        setConversationHistory(prev => [...prev, {
+          speaker: 'ai',
+          message: 'Thank you for completing the interview! I\'ll now generate your detailed analytics.',
+          timestamp: Date.now(),
+          type: 'feedback'
+        }]);
       } catch (error) {
         console.error('[VoiceInterview] Error ending interview:', error);
       }
@@ -378,6 +405,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     if (!transcript.trim() || !voiceSession) return;
 
     stopListening();
+    setUserSpeaking(false);
     setIsThinking(true);
     
     try {
@@ -387,7 +415,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         {
           audioLevel,
           duration: elapsedTime,
-          confidence: 0.9 // This would come from speech recognition
+          confidence: 0.9
         }
       );
       
@@ -402,6 +430,15 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
           ? result.nextQuestion
           : result.nextQuestion?.question || '';
         setCurrentQuestion(nextQuestion);
+        
+        // Add AI's next question to conversation
+        setConversationHistory(prev => [...prev, {
+          speaker: 'ai',
+          message: nextQuestion,
+          timestamp: Date.now(),
+          type: 'question'
+        }]);
+        
         resetTranscript();
       }
     } catch (error) {
@@ -414,6 +451,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   const toggleMicrophone = async () => {
     if (isListening) {
       stopListening();
+      setUserSpeaking(false);
       if (livekitProps) {
         stopAudio();
       }
@@ -422,6 +460,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         await startAudio();
       }
       startListening();
+      setUserSpeaking(true);
     }
   };
 
@@ -444,8 +483,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   };
 
   const progress = simulator.getProgress();
-
-  // Safe participant count - this was the source of the error
   const participantCount = room?.participants?.size || 0;
   
   return (
@@ -475,9 +512,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                 <p className="text-gray-600">Topic: {config.topic}</p>
                 {config.companyName && (
                   <p className="text-gray-600">Company: {config.companyName}</p>
-                )}
-                {voiceSession && (
-                  <p className="text-xs text-blue-600 mt-1">LiveKit URL: {voiceSession.wsUrl}</p>
                 )}
               </div>
               <div className="text-right">
@@ -530,7 +564,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                     <p className="font-medium mb-1">AI Agent Active</p>
                     <p className="mb-2">
                       Your AI interviewer is ready for continuous conversation. 
-                      {conversationalMode ? ' Just speak naturally - no need to click buttons!' : ' Use the microphone button to respond.'}
+                      {conversationalMode ? ' The interview will flow naturally - just speak when ready!' : ' Use the microphone button to respond.'}
                     </p>
                     {voiceSession?.agentError && (
                       <p className="text-xs text-purple-600">
@@ -595,7 +629,25 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                 </button>
               </div>
 
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-4">
+                {/* Speaking Status Indicators */}
+                <div className="flex items-center space-x-2">
+                  {isAISpeaking && (
+                    <div className="flex items-center text-purple-600 text-sm">
+                      <Bot className="w-4 h-4 mr-1" />
+                      <span>AI Speaking</span>
+                      <div className="w-2 h-2 bg-purple-600 rounded-full animate-pulse ml-2"></div>
+                    </div>
+                  )}
+                  {userSpeaking && (
+                    <div className="flex items-center text-green-600 text-sm">
+                      <User className="w-4 h-4 mr-1" />
+                      <span>Listening</span>
+                      <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse ml-2"></div>
+                    </div>
+                  )}
+                </div>
+                
                 <div className="text-sm text-gray-600">
                   Participants: {participantCount}
                 </div>
@@ -605,38 +657,69 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* AI Interviewer & Conversation */}
+            {/* Conversation Flow */}
             <div className="lg:col-span-2">
-              {/* Conversation History (for conversational mode) */}
+              {/* Real-time Conversation Display */}
               {conversationalMode && conversationHistory.length > 0 && (
                 <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                     <MessageCircle className="w-5 h-5 mr-2 text-purple-600" />
-                    Conversation Flow
+                    Live Conversation
+                    <span className="ml-2 text-sm text-green-600">(Real-time)</span>
                   </h3>
                   
-                  <div className="space-y-4 max-h-64 overflow-y-auto">
+                  <div 
+                    ref={conversationRef}
+                    className="space-y-4 max-h-96 overflow-y-auto bg-gray-50 rounded-xl p-4"
+                  >
                     {conversationHistory.map((message, index) => (
                       <div key={index} className={`flex ${message.speaker === 'ai' ? 'justify-start' : 'justify-end'}`}>
-                        <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                        <div className={`max-w-xs lg:max-w-md px-4 py-3 rounded-lg shadow-sm ${
                           message.speaker === 'ai' 
-                            ? 'bg-blue-100 text-blue-900' 
-                            : 'bg-green-100 text-green-900'
+                            ? 'bg-blue-100 text-blue-900 border-l-4 border-blue-500' 
+                            : 'bg-green-100 text-green-900 border-r-4 border-green-500'
                         }`}>
-                          <div className="flex items-center mb-1">
+                          <div className="flex items-center mb-2">
                             {message.speaker === 'ai' ? (
-                              <Bot className="w-4 h-4 mr-1" />
+                              <Bot className="w-4 h-4 mr-2" />
                             ) : (
-                              <User className="w-4 h-4 mr-1" />
+                              <User className="w-4 h-4 mr-2" />
                             )}
                             <span className="text-xs font-medium">
                               {message.speaker === 'ai' ? 'AI Interviewer' : 'You'}
                             </span>
+                            {message.type && (
+                              <span className={`ml-2 text-xs px-2 py-1 rounded-full ${
+                                message.type === 'question' ? 'bg-blue-200 text-blue-800' :
+                                message.type === 'response' ? 'bg-green-200 text-green-800' :
+                                message.type === 'feedback' ? 'bg-yellow-200 text-yellow-800' :
+                                'bg-gray-200 text-gray-800'
+                              }`}>
+                                {message.type}
+                              </span>
+                            )}
                           </div>
-                          <p className="text-sm">{message.message}</p>
+                          <p className="text-sm leading-relaxed">{message.message}</p>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {new Date(message.timestamp).toLocaleTimeString()}
+                          </div>
                         </div>
                       </div>
                     ))}
+                    
+                    {/* Live transcript preview */}
+                    {transcript && userSpeaking && (
+                      <div className="flex justify-end">
+                        <div className="max-w-xs lg:max-w-md px-4 py-3 rounded-lg bg-green-50 text-green-800 border-r-4 border-green-300 opacity-75">
+                          <div className="flex items-center mb-2">
+                            <User className="w-4 h-4 mr-2" />
+                            <span className="text-xs font-medium">You (typing...)</span>
+                            <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse ml-2"></div>
+                          </div>
+                          <p className="text-sm leading-relaxed italic">{transcript}</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -697,15 +780,31 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                   <div className="bg-gray-50 rounded-xl p-4 min-h-[120px]">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-gray-700">Live Transcript</span>
-                      {isListening && (
-                        <div className="flex items-center text-sm text-red-600">
-                          <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse mr-2"></div>
-                          Recording...
-                        </div>
-                      )}
+                      <div className="flex items-center space-x-2">
+                        {userSpeaking && (
+                          <div className="flex items-center text-sm text-green-600">
+                            <CheckCircle className="w-4 h-4 mr-1" />
+                            Listening
+                          </div>
+                        )}
+                        {isAISpeaking && (
+                          <div className="flex items-center text-sm text-purple-600">
+                            <Bot className="w-4 h-4 mr-1" />
+                            AI Speaking
+                          </div>
+                        )}
+                        {!userSpeaking && !isAISpeaking && isInterviewActive && (
+                          <div className="flex items-center text-sm text-gray-500">
+                            <XCircle className="w-4 h-4 mr-1" />
+                            Idle
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <p className="text-gray-800">
-                      {transcript || 'Your speech will appear here in real-time...'}
+                      {transcript || (conversationalMode 
+                        ? 'Speak naturally - your words will appear here in real-time...' 
+                        : 'Your speech will appear here in real-time...')}
                     </p>
                   </div>
 
@@ -742,7 +841,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                       
                       <div className="text-sm text-gray-600">
                         {conversationalMode 
-                          ? 'Continuous listening active'
+                          ? (userSpeaking ? 'Continuous listening active' : 'AI is speaking - please wait')
                           : isListening 
                             ? 'Click to stop recording' 
                             : 'Click to start recording'
@@ -765,88 +864,77 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
               </div>
             </div>
 
-            {/* Notes Section */}
-            <div className="bg-white rounded-2xl shadow-lg p-6">
-              <div className="flex items-center mb-4">
-                <FileText className="w-5 h-5 text-gray-600 mr-2" />
-                <h3 className="text-lg font-semibold text-gray-900">Interview Notes</h3>
-              </div>
-              
-              <textarea
-                ref={notesRef}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Jot down key points, thoughts, or reminders during the voice interview..."
-                className="w-full h-64 px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors"
-              />
-              
-              <div className="mt-4 text-xs text-gray-500">
-                Your notes will be saved and available in the analytics section.
+            {/* Notes & Status Section */}
+            <div className="space-y-6">
+              {/* Interview Notes */}
+              <div className="bg-white rounded-2xl shadow-lg p-6">
+                <div className="flex items-center mb-4">
+                  <FileText className="w-5 h-5 text-gray-600 mr-2" />
+                  <h3 className="text-lg font-semibold text-gray-900">Interview Notes</h3>
+                </div>
+                
+                <textarea
+                  ref={notesRef}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Jot down key points, thoughts, or reminders during the voice interview..."
+                  className="w-full h-48 px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors"
+                />
+                
+                <div className="mt-4 text-xs text-gray-500">
+                  Your notes will be saved and available in the analytics section.
+                </div>
               </div>
 
-              {/* Connection Info */}
-              <div className="mt-6 p-4 bg-blue-50 rounded-xl">
-                <h4 className="font-medium text-blue-900 mb-2">Voice Connection Status</h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-blue-700">LiveKit:</span>
-                    <span className={connectionStatus === 'connected' ? 'text-green-600' : 'text-red-600'}>
+              {/* Connection & Status Info */}
+              <div className="bg-white rounded-2xl shadow-lg p-6">
+                <h4 className="font-medium text-gray-900 mb-4">Connection Status</h4>
+                <div className="space-y-3 text-sm">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-700">LiveKit:</span>
+                    <span className={`flex items-center ${connectionStatus === 'connected' ? 'text-green-600' : 'text-red-600'}`}>
+                      {connectionStatus === 'connected' ? <CheckCircle className="w-4 h-4 mr-1" /> : <XCircle className="w-4 h-4 mr-1" />}
                       {getConnectionStatusText()}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-blue-700">Audio Track:</span>
-                    <span className={localAudioTrack ? 'text-green-600' : 'text-gray-600'}>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-700">Audio Track:</span>
+                    <span className={`flex items-center ${localAudioTrack ? 'text-green-600' : 'text-gray-600'}`}>
+                      {localAudioTrack ? <CheckCircle className="w-4 h-4 mr-1" /> : <XCircle className="w-4 h-4 mr-1" />}
                       {localAudioTrack ? 'Active' : 'Inactive'}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-blue-700">Remote Audio:</span>
-                    <span className={remoteAudioTracks.length > 0 ? 'text-green-600' : 'text-gray-600'}>
-                      {remoteAudioTracks.length} tracks
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-700">AI Agent:</span>
+                    <span className={`flex items-center ${aiAgentEnabled ? 'text-green-600' : 'text-gray-600'}`}>
+                      {aiAgentEnabled ? <Bot className="w-4 h-4 mr-1" /> : <XCircle className="w-4 h-4 mr-1" />}
+                      {aiAgentEnabled ? 'Active' : 'Disabled'}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-blue-700">AI Agent:</span>
-                    <span className={aiAgentEnabled ? 'text-green-600' : 'text-gray-600'}>
-                      {aiAgentEnabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-blue-700">Mode:</span>
-                    <span className={conversationalMode ? 'text-green-600' : 'text-blue-600'}>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-700">Mode:</span>
+                    <span className={`flex items-center ${conversationalMode ? 'text-green-600' : 'text-blue-600'}`}>
+                      {conversationalMode ? <Zap className="w-4 h-4 mr-1" /> : <Mic className="w-4 h-4 mr-1" />}
                       {conversationalMode ? 'Conversational' : 'Manual'}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-blue-700">Participants:</span>
-                    <span className="text-blue-900">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-700">Participants:</span>
+                    <span className="text-gray-900 font-medium">
                       {participantCount}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-blue-700">LiveKit Ready:</span>
-                    <span className={livekitReady ? 'text-green-600' : 'text-red-600'}>
-                      {livekitReady ? 'Yes' : 'No'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-blue-700">Has Props:</span>
-                    <span className={livekitProps ? 'text-green-600' : 'text-red-600'}>
-                      {livekitProps ? 'Yes' : 'No'}
-                    </span>
-                  </div>
-                  {voiceSession && (
-                    <div className="mt-3 pt-2 border-t border-blue-200">
-                      <div className="text-xs text-blue-600">
-                        <div><strong>Session:</strong> {voiceSession.sessionId}</div>
-                        <div><strong>Room:</strong> {voiceSession.roomName}</div>
-                        <div><strong>Backend URL:</strong> "{voiceSession.wsUrl}"</div>
-                        <div><strong>Token Length:</strong> {voiceSession.participantToken?.length || 0}</div>
-                      </div>
-                    </div>
-                  )}
                 </div>
+                
+                {voiceSession && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <div className="text-xs text-gray-600 space-y-1">
+                      <div><strong>Session:</strong> {voiceSession.sessionId}</div>
+                      <div><strong>Room:</strong> {voiceSession.roomName}</div>
+                      <div><strong>Token Length:</strong> {voiceSession.participantToken?.length || 0}</div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

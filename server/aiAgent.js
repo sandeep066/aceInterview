@@ -1,6 +1,5 @@
 import { WorkerOptions, cli, defineAgent } from '@livekit/agents';
-import { multimodal } from '@livekit/agents-plugin-openai';
-import { VoiceAssistant } from '@livekit/agents-plugin-openai';
+import { openai } from '@livekit/agents-plugin-openai';
 import { Room, RoomEvent, RemoteAudioTrack, LocalAudioTrack } from 'livekit-server-sdk';
 import dotenv from 'dotenv';
 import { LLMQuestionGenerator } from './llmService.js';
@@ -49,8 +48,8 @@ export class AIInterviewAgent {
     }
 
     // Create voice assistant with interview-specific configuration
-    const assistant = new VoiceAssistant({
-      model: multimodal.RealtimeModel({
+    const assistant = new openai.VoiceAssistant({
+      model: new openai.realtime.RealtimeModel({
         instructions: this.createInterviewInstructions(sessionData.config),
         voice: 'alloy',
         temperature: 0.7,
