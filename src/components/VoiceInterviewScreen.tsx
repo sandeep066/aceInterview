@@ -24,7 +24,9 @@ import {
   Zap,
   CheckCircle,
   XCircle,
-  Brain
+  Brain,
+  Settings,
+  Cpu
 } from 'lucide-react';
 import { InterviewConfig } from '../types';
 import { AIInterviewSimulator } from '../utils/aiSimulator';
@@ -58,6 +60,8 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   const [conversationalMode, setConversationalMode] = useState(false);
   const [aiAgentEnabled, setAiAgentEnabled] = useState(false);
   const [agentProvider, setAgentProvider] = useState<string>('google');
+  const [selectedProvider, setSelectedProvider] = useState<'openai' | 'google'>('google');
+  const [showProviderSelection, setShowProviderSelection] = useState(false);
   const [conversationHistory, setConversationHistory] = useState<Array<{
     speaker: 'ai' | 'user';
     message: string;
@@ -180,9 +184,10 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       
       // Add initial greeting to conversation history if AI agent is enabled
       if (voiceSession.aiAgentEnabled) {
+        const providerName = voiceSession.agentProvider === 'openai' ? 'OpenAI' : 'Google AI';
         setConversationHistory([{
           speaker: 'ai',
-          message: 'Hello! I\'m your Google AI interviewer. I\'ll be conducting your interview today using advanced speech recognition and natural language processing. Please wait a moment while I prepare...',
+          message: `Hello! I'm your ${providerName} interviewer. I'll be conducting your interview today using advanced speech recognition and natural language processing. Please wait a moment while I prepare...`,
           timestamp: Date.now(),
           type: 'greeting'
         }]);
@@ -201,15 +206,16 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
           
           console.log('[VoiceInterview] ✅ Voice interview started successfully');
           
-          // If conversational mode is enabled, the Google AI agent will handle the flow
+          // If conversational mode is enabled, the AI agent will handle the flow
           if (voiceSession.conversationalMode) {
             setTimeout(() => {
-              console.log('[VoiceInterview] 🎤 Google AI agent is managing the conversation flow');
+              const providerName = voiceSession.agentProvider === 'openai' ? 'OpenAI' : 'Google AI';
+              console.log(`[VoiceInterview] 🎤 ${providerName} AI agent is managing the conversation flow`);
               
-              // Add system message about Google AI management
+              // Add system message about AI management
               setConversationHistory(prev => [...prev, {
                 speaker: 'ai',
-                message: 'Perfect! I\'m now ready to begin. The interview will flow naturally using Google\'s advanced speech technology. Are you ready to start?',
+                message: `Perfect! I'm now ready to begin. The interview will flow naturally using ${providerName}'s advanced speech technology. Are you ready to start?`,
                 timestamp: Date.now(),
                 type: 'question'
               }]);
@@ -230,15 +236,15 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   // Listen for remote audio data (AI responses) in conversational mode
   useEffect(() => {
     if (conversationalMode && remoteAudioTracks.length > 0) {
-      console.log('[VoiceInterview] 🎵 Google AI audio received in conversational mode');
+      console.log(`[VoiceInterview] 🎵 ${agentProvider.toUpperCase()} AI audio received in conversational mode`);
       setIsAISpeaking(true);
       
-      // The Google AI agent manages its own listening state
+      // The AI agent manages its own listening state
       setTimeout(() => {
         setIsAISpeaking(false);
       }, 3000);
     }
-  }, [conversationalMode, remoteAudioTracks]);
+  }, [conversationalMode, remoteAudioTracks, agentProvider]);
 
   const formatTime = (ms: number): string => {
     const minutes = Math.floor(ms / 60000);
@@ -251,10 +257,16 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       setIsThinking(true);
       setConnectionStatus('connecting');
       
-      console.log('[VoiceInterview] ========== STARTING GOOGLE AI VOICE INTERVIEW ==========');
+      const providerName = selectedProvider === 'openai' ? 'OpenAI' : 'Google AI';
+      console.log(`[VoiceInterview] ========== STARTING ${providerName.toUpperCase()} VOICE INTERVIEW ==========`);
       
-      // Start voice interview session with Google AI agent enabled
-      const session = await VoiceInterviewService.startVoiceInterview(config, participantName);
+      // Start voice interview session with selected AI agent provider
+      const session = await VoiceInterviewService.startVoiceInterview(
+        config, 
+        participantName, 
+        true, // enableAIAgent
+        selectedProvider // agentProvider
+      );
       console.log('[VoiceInterview] Session received from backend:', session);
       
       // Validate session data before proceeding
@@ -267,21 +279,21 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       // Extract question string from the response object
       const firstQuestion = typeof session.firstQuestion === 'string' 
         ? session.firstQuestion 
-        : session.firstQuestion?.question || 'Welcome to your Google AI voice interview. Please wait for the first question.';
+        : session.firstQuestion?.question || `Welcome to your ${providerName} voice interview. Please wait for the first question.`;
       setCurrentQuestion(firstQuestion);
       
       // Set the session - this will trigger the useEffect above to connect to LiveKit
       setVoiceSession(session);
       
     } catch (error) {
-      console.error('[VoiceInterview] ❌ Error starting Google AI voice interview:', error);
+      console.error(`[VoiceInterview] ❌ Error starting ${selectedProvider.toUpperCase()} voice interview:`, error);
       
       setConnectionStatus('error');
       setIsThinking(false);
       
       // Show user-friendly error message
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      alert(`Failed to start Google AI voice interview: ${errorMessage}`);
+      alert(`Failed to start ${selectedProvider.toUpperCase()} voice interview: ${errorMessage}`);
     }
   };
 
@@ -321,9 +333,10 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         }
         
         // Add resume message to conversation
+        const providerName = agentProvider === 'openai' ? 'OpenAI' : 'Google AI';
         setConversationHistory(prev => [...prev, {
           speaker: 'ai',
-          message: 'Great! Let\'s continue with the interview. The Google AI agent is ready to proceed.',
+          message: `Great! Let's continue with the interview. The ${providerName} agent is ready to proceed.`,
           timestamp: Date.now(),
           type: 'question'
         }]);
@@ -347,9 +360,10 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         await VoiceInterviewService.endInterview(voiceSession.sessionId);
         
         // Add completion message to conversation
+        const providerName = agentProvider === 'openai' ? 'OpenAI' : 'Google AI';
         setConversationHistory(prev => [...prev, {
           speaker: 'ai',
-          message: 'Thank you for completing the interview with Google AI! I\'ll now generate your detailed analytics using advanced AI analysis.',
+          message: `Thank you for completing the interview with ${providerName}! I'll now generate your detailed analytics using advanced AI analysis.`,
           timestamp: Date.now(),
           type: 'feedback'
         }]);
@@ -379,6 +393,14 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     }
   };
 
+  const getProviderIcon = (provider: string) => {
+    return provider === 'openai' ? <Cpu className="w-4 h-4" /> : <Brain className="w-4 h-4" />;
+  };
+
+  const getProviderColor = (provider: string) => {
+    return provider === 'openai' ? 'text-green-600 bg-green-100' : 'text-purple-600 bg-purple-100';
+  };
+
   const progress = simulator.getProgress();
   const participantCount = room?.participants?.size || 0;
   
@@ -392,11 +414,11 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
               <div>
                 <h1 className="text-2xl font-bold text-gray-900 flex items-center">
                   <Phone className="w-6 h-6 mr-2 text-blue-600" />
-                  Google AI Voice Interview - {config.style.charAt(0).toUpperCase() + config.style.slice(1).replace('-', ' ')}
+                  AI Voice Interview - {config.style.charAt(0).toUpperCase() + config.style.slice(1).replace('-', ' ')}
                   {aiAgentEnabled && (
-                    <span className="ml-3 inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                      <Brain className="w-3 h-3 mr-1" />
-                      Google AI
+                    <span className={`ml-3 inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getProviderColor(agentProvider)}`}>
+                      {getProviderIcon(agentProvider)}
+                      <span className="ml-1">{agentProvider === 'openai' ? 'OpenAI' : 'Google AI'}</span>
                     </span>
                   )}
                   {conversationalMode && (
@@ -411,7 +433,10 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                   <p className="text-gray-600">Company: {config.companyName}</p>
                 )}
                 <p className="text-xs text-blue-600 mt-1">
-                  Powered by Google Gemini AI, Speech-to-Text, and Text-to-Speech
+                  {aiAgentEnabled 
+                    ? `Powered by ${agentProvider === 'openai' ? 'OpenAI GPT-4, Whisper, and TTS' : 'Google Gemini AI, Speech-to-Text, and Text-to-Speech'}`
+                    : 'Manual voice control mode'
+                  }
                 </p>
               </div>
               <div className="text-right">
@@ -437,6 +462,62 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
               </div>
             </div>
 
+            {/* Provider Selection */}
+            {!isInterviewActive && !voiceSession && (
+              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium text-blue-900">Choose AI Provider</h4>
+                  <button
+                    onClick={() => setShowProviderSelection(!showProviderSelection)}
+                    className="text-blue-600 hover:text-blue-800"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setSelectedProvider('openai')}
+                    className={`p-3 rounded-lg border-2 transition-all ${
+                      selectedProvider === 'openai'
+                        ? 'border-green-500 bg-green-50'
+                        : 'border-gray-200 hover:border-green-300'
+                    }`}
+                  >
+                    <div className="flex items-center mb-2">
+                      <Cpu className="w-5 h-5 mr-2 text-green-600" />
+                      <span className="font-medium text-gray-900">OpenAI</span>
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      GPT-4 + Whisper + TTS
+                    </div>
+                  </button>
+                  
+                  <button
+                    onClick={() => setSelectedProvider('google')}
+                    className={`p-3 rounded-lg border-2 transition-all ${
+                      selectedProvider === 'google'
+                        ? 'border-purple-500 bg-purple-50'
+                        : 'border-gray-200 hover:border-purple-300'
+                    }`}
+                  >
+                    <div className="flex items-center mb-2">
+                      <Brain className="w-5 h-5 mr-2 text-purple-600" />
+                      <span className="font-medium text-gray-900">Google AI</span>
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      Gemini + Cloud Speech
+                    </div>
+                  </button>
+                </div>
+                
+                <div className="mt-3 text-xs text-blue-700">
+                  Selected: <strong>{selectedProvider === 'openai' ? 'OpenAI' : 'Google AI'}</strong> - 
+                  This will be used for speech recognition, natural language processing, and text-to-speech.
+                </div>
+              </div>
+            )}
+
             {/* Error Display */}
             {connectionStatus === 'error' && livekitError && (
               <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -455,33 +536,33 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
               </div>
             )}
 
-            {/* Google AI Agent Status */}
+            {/* AI Agent Status */}
             {aiAgentEnabled && (
-              <div className="mb-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+              <div className={`mb-4 p-4 border rounded-lg ${getProviderColor(agentProvider).replace('text-', 'border-').replace('bg-', 'bg-').replace('600', '200').replace('100', '50')}`}>
                 <div className="flex items-start">
-                  <Brain className="w-5 h-5 text-purple-600 mr-3 mt-0.5 flex-shrink-0" />
-                  <div className="text-purple-800 text-sm">
-                    <p className="font-medium mb-1">Google AI Agent Active</p>
+                  {getProviderIcon(agentProvider)}
+                  <div className={`ml-3 text-sm ${getProviderColor(agentProvider).split(' ')[0].replace('600', '800')}`}>
+                    <p className="font-medium mb-1">{agentProvider === 'openai' ? 'OpenAI' : 'Google AI'} Agent Active</p>
                     <p className="mb-2">
-                      Your Google AI interviewer is ready for continuous conversation using advanced speech recognition and natural language processing.
+                      Your {agentProvider === 'openai' ? 'OpenAI' : 'Google AI'} interviewer is ready for continuous conversation using advanced speech recognition and natural language processing.
                       {conversationalMode ? ' The interview will flow naturally with intelligent turn-taking!' : ' Use the microphone button to respond.'}
                     </p>
                     <div className="flex items-center space-x-4 text-xs">
                       <span className="flex items-center">
                         <CheckCircle className="w-3 h-3 mr-1 text-green-600" />
-                        Gemini AI
+                        {agentProvider === 'openai' ? 'GPT-4' : 'Gemini AI'}
                       </span>
                       <span className="flex items-center">
                         <CheckCircle className="w-3 h-3 mr-1 text-green-600" />
-                        Speech-to-Text
+                        {agentProvider === 'openai' ? 'Whisper STT' : 'Speech-to-Text'}
                       </span>
                       <span className="flex items-center">
                         <CheckCircle className="w-3 h-3 mr-1 text-green-600" />
-                        Text-to-Speech
+                        {agentProvider === 'openai' ? 'OpenAI TTS' : 'Text-to-Speech'}
                       </span>
                     </div>
                     {voiceSession?.agentError && (
-                      <p className="text-xs text-purple-600 mt-2">
+                      <p className="text-xs mt-2">
                         Note: {voiceSession.agentError}
                       </p>
                     )}
@@ -520,9 +601,11 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                     {isThinking ? (
                       <Loader className="w-4 h-4 mr-2 animate-spin" />
                     ) : (
-                      <Brain className="w-4 h-4 mr-2" />
+                      getProviderIcon(selectedProvider)
                     )}
-                    {startTime ? 'Resume Google AI Interview' : 'Start Google AI Interview'}
+                    <span className="ml-2">
+                      {startTime ? 'Resume' : 'Start'} {selectedProvider === 'openai' ? 'OpenAI' : 'Google AI'} Interview
+                    </span>
                   </button>
                 ) : (
                   <button
@@ -547,10 +630,10 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                 {/* Speaking Status Indicators */}
                 <div className="flex items-center space-x-2">
                   {isAISpeaking && (
-                    <div className="flex items-center text-purple-600 text-sm">
-                      <Brain className="w-4 h-4 mr-1" />
-                      <span>Google AI Speaking</span>
-                      <div className="w-2 h-2 bg-purple-600 rounded-full animate-pulse ml-2"></div>
+                    <div className={`flex items-center text-sm ${getProviderColor(agentProvider).split(' ')[0]}`}>
+                      {getProviderIcon(agentProvider)}
+                      <span className="ml-1">{agentProvider === 'openai' ? 'OpenAI' : 'Google AI'} Speaking</span>
+                      <div className={`w-2 h-2 rounded-full animate-pulse ml-2 ${getProviderColor(agentProvider).split(' ')[1].replace('bg-', 'bg-').replace('100', '600')}`}></div>
                     </div>
                   )}
                   {conversationalMode && !isAISpeaking && (
@@ -577,8 +660,8 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
               {conversationalMode && conversationHistory.length > 0 && (
                 <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                    <MessageCircle className="w-5 h-5 mr-2 text-purple-600" />
-                    Live Google AI Conversation
+                    <MessageCircle className={`w-5 h-5 mr-2 ${getProviderColor(agentProvider).split(' ')[0]}`} />
+                    Live {agentProvider === 'openai' ? 'OpenAI' : 'Google AI'} Conversation
                     <span className="ml-2 text-sm text-green-600">(Real-time)</span>
                   </h3>
                   
@@ -590,21 +673,21 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                       <div key={index} className={`flex ${message.speaker === 'ai' ? 'justify-start' : 'justify-end'}`}>
                         <div className={`max-w-xs lg:max-w-md px-4 py-3 rounded-lg shadow-sm ${
                           message.speaker === 'ai' 
-                            ? 'bg-purple-100 text-purple-900 border-l-4 border-purple-500' 
+                            ? `${getProviderColor(agentProvider).replace('text-', 'bg-').replace('600', '100')} ${getProviderColor(agentProvider).replace('bg-', 'text-').replace('100', '900')} border-l-4 ${getProviderColor(agentProvider).replace('text-', 'border-').replace('600', '500')}` 
                             : 'bg-green-100 text-green-900 border-r-4 border-green-500'
                         }`}>
                           <div className="flex items-center mb-2">
                             {message.speaker === 'ai' ? (
-                              <Brain className="w-4 h-4 mr-2" />
+                              getProviderIcon(agentProvider)
                             ) : (
                               <User className="w-4 h-4 mr-2" />
                             )}
                             <span className="text-xs font-medium">
-                              {message.speaker === 'ai' ? 'Google AI Interviewer' : 'You'}
+                              {message.speaker === 'ai' ? `${agentProvider === 'openai' ? 'OpenAI' : 'Google AI'} Interviewer` : 'You'}
                             </span>
                             {message.type && (
                               <span className={`ml-2 text-xs px-2 py-1 rounded-full ${
-                                message.type === 'question' ? 'bg-purple-200 text-purple-800' :
+                                message.type === 'question' ? `${getProviderColor(agentProvider).replace('text-', 'bg-').replace('600', '200')} ${getProviderColor(agentProvider).replace('bg-', 'text-').replace('100', '800')}` :
                                 message.type === 'response' ? 'bg-green-200 text-green-800' :
                                 message.type === 'feedback' ? 'bg-yellow-200 text-yellow-800' :
                                 'bg-gray-200 text-gray-800'
@@ -642,37 +725,41 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
               {!conversationalMode && (
                 <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
                   <div className="flex items-center mb-4">
-                    <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center mr-4">
-                      <Brain className="w-6 h-6 text-white" />
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center mr-4 ${getProviderColor(agentProvider || selectedProvider).replace('text-', 'bg-').replace('600', '500')}`}>
+                      {getProviderIcon(agentProvider || selectedProvider)}
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900">Google AI Voice Interviewer</h3>
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        {(agentProvider || selectedProvider) === 'openai' ? 'OpenAI' : 'Google AI'} Voice Interviewer
+                      </h3>
                       <p className="text-sm text-gray-600">
-                        Real-time voice conversation powered by Google Cloud AI
+                        Real-time voice conversation powered by {(agentProvider || selectedProvider) === 'openai' ? 'OpenAI' : 'Google Cloud AI'}
                       </p>
                     </div>
                   </div>
 
-                  <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-6 min-h-[200px]">
+                  <div className={`rounded-xl p-6 min-h-[200px] ${getProviderColor(agentProvider || selectedProvider).replace('text-', 'bg-').replace('600', '50')}`}>
                     {isThinking ? (
                       <div className="flex items-center justify-center h-full">
-                        <Loader className="w-6 h-6 text-purple-600 animate-spin mr-3" />
-                        <span className="text-gray-600">Google AI is processing your response...</span>
+                        <Loader className={`w-6 h-6 animate-spin mr-3 ${getProviderColor(agentProvider || selectedProvider).split(' ')[0]}`} />
+                        <span className="text-gray-600">
+                          {(agentProvider || selectedProvider) === 'openai' ? 'OpenAI' : 'Google AI'} is processing your response...
+                        </span>
                       </div>
                     ) : currentQuestion ? (
                       <div>
                         <p className="text-lg text-gray-800 leading-relaxed mb-4">{currentQuestion}</p>
                         {isInterviewActive && connectionStatus === 'connected' && (
-                          <div className="flex items-center text-sm text-purple-600">
-                            <div className="w-2 h-2 bg-purple-600 rounded-full animate-pulse mr-2"></div>
-                            Google AI voice interview active - speak your response
+                          <div className={`flex items-center text-sm ${getProviderColor(agentProvider || selectedProvider).split(' ')[0]}`}>
+                            <div className={`w-2 h-2 rounded-full animate-pulse mr-2 ${getProviderColor(agentProvider || selectedProvider).split(' ')[1].replace('bg-', 'bg-').replace('100', '600')}`}></div>
+                            {(agentProvider || selectedProvider) === 'openai' ? 'OpenAI' : 'Google AI'} voice interview active - speak your response
                           </div>
                         )}
                       </div>
                     ) : (
                       <div className="flex items-center justify-center h-full text-gray-500">
-                        <Brain className="w-8 h-8 mr-3" />
-                        <span>Click "Start Google AI Interview" to begin</span>
+                        {getProviderIcon(selectedProvider)}
+                        <span className="ml-3">Click "Start {selectedProvider === 'openai' ? 'OpenAI' : 'Google AI'} Interview" to begin</span>
                       </div>
                     )}
                   </div>
@@ -685,7 +772,9 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                   <Mic className="w-5 h-5 mr-2 text-blue-600" />
                   Voice Response
                   {conversationalMode && (
-                    <span className="ml-2 text-sm text-green-600">(Google AI Managed)</span>
+                    <span className={`ml-2 text-sm ${getProviderColor(agentProvider).split(' ')[0]}`}>
+                      ({agentProvider === 'openai' ? 'OpenAI' : 'Google AI'} Managed)
+                    </span>
                   )}
                 </h3>
                 
@@ -693,16 +782,18 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                   {/* Live Transcript */}
                   <div className="bg-gray-50 rounded-xl p-4 min-h-[120px]">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-700">Live Transcript (Google Speech-to-Text)</span>
+                      <span className="text-sm font-medium text-gray-700">
+                        Live Transcript ({(agentProvider || selectedProvider) === 'openai' ? 'OpenAI Whisper' : 'Google Speech-to-Text'})
+                      </span>
                       <div className="flex items-center space-x-2">
                         {conversationalMode && (
-                          <div className="flex items-center text-sm text-purple-600">
-                            <Brain className="w-4 h-4 mr-1" />
-                            AI Managed
+                          <div className={`flex items-center text-sm ${getProviderColor(agentProvider).split(' ')[0]}`}>
+                            {getProviderIcon(agentProvider)}
+                            <span className="ml-1">AI Managed</span>
                           </div>
                         )}
                         {isAISpeaking && (
-                          <div className="flex items-center text-sm text-purple-600">
+                          <div className={`flex items-center text-sm ${getProviderColor(agentProvider).split(' ')[0]}`}>
                             <Bot className="w-4 h-4 mr-1" />
                             AI Speaking
                           </div>
@@ -717,8 +808,8 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                     </div>
                     <p className="text-gray-800">
                       {transcript || (conversationalMode 
-                        ? 'Google AI is managing the conversation flow. Your speech will be processed automatically...' 
-                        : 'Your speech will appear here in real-time using Google Speech-to-Text...')}
+                        ? `${agentProvider === 'openai' ? 'OpenAI' : 'Google AI'} is managing the conversation flow. Your speech will be processed automatically...` 
+                        : `Your speech will appear here in real-time using ${(agentProvider || selectedProvider) === 'openai' ? 'OpenAI Whisper' : 'Google Speech-to-Text'}...`)}
                     </p>
                   </div>
 
@@ -728,7 +819,11 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                       <Volume2 className="w-5 h-5 text-gray-600" />
                       <div className="flex-1 bg-gray-200 rounded-full h-2">
                         <div
-                          className="bg-gradient-to-r from-green-400 to-purple-500 h-2 rounded-full transition-all duration-100"
+                          className={`h-2 rounded-full transition-all duration-100 ${
+                            (agentProvider || selectedProvider) === 'openai' 
+                              ? 'bg-gradient-to-r from-green-400 to-green-600' 
+                              : 'bg-gradient-to-r from-purple-400 to-purple-600'
+                          }`}
                           style={{ width: `${audioLevel}%` }}
                         />
                       </div>
@@ -741,15 +836,15 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                     <div className="flex items-center space-x-3">
                       <div className="text-sm text-gray-600">
                         {conversationalMode 
-                          ? 'Google AI is managing the conversation flow automatically'
+                          ? `${agentProvider === 'openai' ? 'OpenAI' : 'Google AI'} is managing the conversation flow automatically`
                           : 'Manual voice control mode'
                         }
                       </div>
                     </div>
 
                     {conversationalMode && (
-                      <div className="text-sm text-purple-600 font-medium">
-                        Powered by Google Cloud AI
+                      <div className={`text-sm font-medium ${getProviderColor(agentProvider).split(' ')[0]}`}>
+                        Powered by {agentProvider === 'openai' ? 'OpenAI' : 'Google Cloud AI'}
                       </div>
                     )}
                   </div>
@@ -770,7 +865,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                   ref={notesRef}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Jot down key points, thoughts, or reminders during the Google AI voice interview..."
+                  placeholder={`Jot down key points, thoughts, or reminders during the ${agentProvider === 'openai' ? 'OpenAI' : 'Google AI'} voice interview...`}
                   className="w-full h-48 px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors"
                 />
                 
@@ -781,7 +876,9 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
 
               {/* Connection & Status Info */}
               <div className="bg-white rounded-2xl shadow-lg p-6">
-                <h4 className="font-medium text-gray-900 mb-4">Google AI Status</h4>
+                <h4 className="font-medium text-gray-900 mb-4">
+                  {agentProvider === 'openai' ? 'OpenAI' : 'Google AI'} Status
+                </h4>
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between items-center">
                     <span className="text-gray-700">LiveKit:</span>
@@ -798,10 +895,10 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-700">Google AI Agent:</span>
-                    <span className={`flex items-center ${aiAgentEnabled ? 'text-green-600' : 'text-gray-600'}`}>
-                      {aiAgentEnabled ? <Brain className="w-4 h-4 mr-1" /> : <XCircle className="w-4 h-4 mr-1" />}
-                      {aiAgentEnabled ? 'Active' : 'Disabled'}
+                    <span className="text-gray-700">AI Agent:</span>
+                    <span className={`flex items-center ${aiAgentEnabled ? getProviderColor(agentProvider).split(' ')[0] : 'text-gray-600'}`}>
+                      {aiAgentEnabled ? getProviderIcon(agentProvider) : <XCircle className="w-4 h-4 mr-1" />}
+                      <span className="ml-1">{aiAgentEnabled ? 'Active' : 'Disabled'}</span>
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -813,8 +910,8 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-700">Provider:</span>
-                    <span className="text-purple-600 font-medium">
-                      Google Cloud AI
+                    <span className={`font-medium ${getProviderColor(agentProvider || selectedProvider).split(' ')[0]}`}>
+                      {(agentProvider || selectedProvider) === 'openai' ? 'OpenAI' : 'Google Cloud AI'}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -831,7 +928,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                       <div><strong>Session:</strong> {voiceSession.sessionId}</div>
                       <div><strong>Room:</strong> {voiceSession.roomName}</div>
                       <div><strong>Token Length:</strong> {voiceSession.participantToken?.length || 0}</div>
-                      <div><strong>AI Provider:</strong> Google Cloud</div>
+                      <div><strong>AI Provider:</strong> {(agentProvider || selectedProvider) === 'openai' ? 'OpenAI' : 'Google Cloud'}</div>
                     </div>
                   </div>
                 )}

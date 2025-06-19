@@ -8,6 +8,9 @@ export interface VoiceInterviewSession {
   participantToken: string;
   firstQuestion?: string;
   config: InterviewConfig;
+  aiAgentEnabled?: boolean;
+  conversationalMode?: boolean;
+  agentProvider?: string;
 }
 
 export interface VoiceResponseResult {
@@ -44,16 +47,20 @@ export class VoiceInterviewService {
   private static readonly API_BASE = '/voice-interview';
 
   /**
-   * Start a new voice interview session
+   * Start a new voice interview session with provider selection
    */
   static async startVoiceInterview(
     config: InterviewConfig, 
-    participantName: string
+    participantName: string,
+    enableAIAgent: boolean = true,
+    agentProvider: 'openai' | 'google' = 'google'
   ): Promise<VoiceInterviewSession> {
     try {
       const response = await APIService.post(`${this.API_BASE}/start`, {
         config,
-        participantName
+        participantName,
+        enableAIAgent,
+        agentProvider
       });
       return response.data;
     } catch (error) {
@@ -173,13 +180,41 @@ export class VoiceInterviewService {
   /**
    * Check if LiveKit is configured
    */
-  static async checkLiveKitConfig(): Promise<{ configured: boolean; wsUrl?: string }> {
+  static async checkLiveKitConfig(): Promise<{ configured: boolean; wsUrl?: string; aiAgent?: any }> {
     try {
       const response = await APIService.get('/livekit/config');
       return response.data;
     } catch (error) {
       console.error('Error checking LiveKit config:', error);
       return { configured: false };
+    }
+  }
+
+  /**
+   * Get AI agent status
+   */
+  static async getAIAgentStatus(): Promise<any> {
+    try {
+      const response = await APIService.get('/ai-agent/status');
+      return response.data;
+    } catch (error) {
+      console.error('Error getting AI agent status:', error);
+      return { service: { enabled: false }, activeAgents: [] };
+    }
+  }
+
+  /**
+   * Switch AI agent provider
+   */
+  static async switchAIAgentProvider(provider: 'openai' | 'google'): Promise<any> {
+    try {
+      const response = await APIService.post('/ai-agent/switch-provider', {
+        provider
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error switching AI agent provider:', error);
+      throw new Error('Failed to switch AI agent provider.');
     }
   }
 
