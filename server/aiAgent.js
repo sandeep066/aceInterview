@@ -1,5 +1,5 @@
 import { WorkerOptions, cli, defineAgent } from '@livekit/agents';
-import { Room, RoomEvent, RemoteAudioTrack, LocalAudioTrack, AudioFrame } from 'livekit-server-sdk';
+import { Room, RoomEvent, RemoteAudioTrack, LocalAudioTrack } from 'livekit-server-sdk';
 import WebSocket from 'ws';
 import { Readable } from 'stream';
 import dotenv from 'dotenv';
@@ -48,32 +48,14 @@ export class MultiProviderAIInterviewAgent {
    */
   async initializeOpenAI() {
     try {
-      // Import OpenAI modules dynamically to avoid import errors
-      const { openai } = await import('@livekit/agents-plugin-openai');
-      
       if (!process.env.OPENAI_API_KEY) {
         throw new Error('OPENAI_API_KEY not found');
       }
 
-      // Initialize OpenAI STT
-      this.sttModel = new openai.STT({
-        model: 'whisper-1',
-        language: 'en'
-      });
+      // Initialize OpenAI client for TTS and STT
+      this.openaiApiKey = process.env.OPENAI_API_KEY;
 
-      // Initialize OpenAI TTS
-      this.ttsModel = new openai.TTS({
-        model: 'tts-1',
-        voice: 'nova'
-      });
-
-      // Initialize OpenAI LLM
-      this.llmModel = new openai.LLM({
-        model: 'gpt-4o-mini',
-        temperature: 0.7
-      });
-
-      console.log('✅ OpenAI services initialized (STT, TTS, LLM)');
+      console.log('✅ OpenAI services initialized (API Key configured)');
       this.useOpenAI = true;
 
     } catch (error) {
@@ -97,7 +79,7 @@ export class MultiProviderAIInterviewAgent {
 
       // Initialize Google Cloud Speech-to-Text
       if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-        const speech = await import('@google/cloud-speech');
+        const speech = await import('@google-cloud/speech');
         this.speechClient = new speech.SpeechClient({
           keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
           projectId: process.env.GOOGLE_CLOUD_PROJECT_ID
@@ -107,7 +89,7 @@ export class MultiProviderAIInterviewAgent {
 
       // Initialize Google Cloud Text-to-Speech
       if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-        const textToSpeech = await import('@google/cloud-text-to-speech');
+        const textToSpeech = await import('@google-cloud/text-to-speech');
         this.ttsClient = new textToSpeech.TextToSpeechClient({
           keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
           projectId: process.env.GOOGLE_CLOUD_PROJECT_ID
@@ -265,37 +247,31 @@ export class MultiProviderAIInterviewAgent {
   async setupOpenAIAudioProcessing(ctx, sessionData) {
     const { room } = ctx;
     
-    // Create and publish audio track for AI speech output
+    // Create audio source for AI speech output
+    sessionData.audioSource = await ctx.room.localParticipant.createAudioSource({
+      sampleRate: 48000,
+      numChannels: 1
+    });
+    
+    // Create and publish audio track
     sessionData.audioTrack = await ctx.room.localParticipant.createAudioTrack({
-      source: 'microphone',
+      source: sessionData.audioSource,
       name: 'ai-speech'
     });
     
     // CRITICAL: Publish the audio track so participants can hear the AI
     await ctx.room.localParticipant.publishTrack(sessionData.audioTrack);
-    console.log('🎵 AI audio track published to room');
+    console.log('🎵 OpenAI AI audio track published to room');
     
-    // Set up OpenAI STT
-    if (this.sttModel) {
-      room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-        if (track.kind === 'audio' && participant.identity !== 'ai-interviewer') {
-          console.log('🎤 Subscribed to participant audio track (OpenAI STT)');
-          
-          track.on('audioFrame', async (frame) => {
-            if (sessionData.isListening && !sessionData.isAISpeaking) {
-              try {
-                const transcript = await this.sttModel.recognize(frame.data);
-                if (transcript && transcript.trim().length > 0) {
-                  await this.processUserResponse(transcript, sessionData);
-                }
-              } catch (error) {
-                console.error('❌ OpenAI STT error:', error);
-              }
-            }
-          });
-        }
-      });
-    }
+    // Set up audio frame processing for STT
+    room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+      if (track.kind === 'audio' && participant.identity !== 'ai-interviewer') {
+        console.log('🎤 Subscribed to participant audio track (OpenAI STT)');
+        
+        // Set up audio frame processing
+        this.setupOpenAISTT(track, sessionData);
+      }
+    });
   }
 
   /**
@@ -304,15 +280,21 @@ export class MultiProviderAIInterviewAgent {
   async setupGoogleAudioProcessing(ctx, sessionData) {
     const { room } = ctx;
     
-    // Create and publish audio track for AI speech output
+    // Create audio source for AI speech output
+    sessionData.audioSource = await ctx.room.localParticipant.createAudioSource({
+      sampleRate: 48000,
+      numChannels: 1
+    });
+    
+    // Create and publish audio track
     sessionData.audioTrack = await ctx.room.localParticipant.createAudioTrack({
-      source: 'microphone',
+      source: sessionData.audioSource,
       name: 'ai-speech'
     });
     
     // CRITICAL: Publish the audio track so participants can hear the AI
     await ctx.room.localParticipant.publishTrack(sessionData.audioTrack);
-    console.log('🎵 AI audio track published to room');
+    console.log('🎵 Google AI audio track published to room');
     
     // Set up Google Speech-to-Text
     if (this.speechClient) {
@@ -341,11 +323,8 @@ export class MultiProviderAIInterviewAgent {
         if (track.kind === 'audio' && participant.identity !== 'ai-interviewer') {
           console.log('🎤 Subscribed to participant audio track (Google STT)');
           
-          track.on('audioFrame', (frame) => {
-            if (sessionData.isListening && !sessionData.isAISpeaking) {
-              recognizeStream.write(frame.data);
-            }
-          });
+          // Set up audio frame processing
+          this.setupGoogleSTT(track, recognizeStream, sessionData);
         }
       });
 
@@ -359,15 +338,100 @@ export class MultiProviderAIInterviewAgent {
   async setupBasicAudioProcessing(ctx, sessionData) {
     console.log('⚠️ Using basic audio processing (no STT/TTS)');
     
-    // Create and publish audio track for basic audio output
+    // Create audio source for basic audio output
+    sessionData.audioSource = await ctx.room.localParticipant.createAudioSource({
+      sampleRate: 48000,
+      numChannels: 1
+    });
+    
+    // Create and publish audio track
     sessionData.audioTrack = await ctx.room.localParticipant.createAudioTrack({
-      source: 'microphone',
+      source: sessionData.audioSource,
       name: 'ai-speech'
     });
     
     // CRITICAL: Publish the audio track so participants can hear the AI
     await ctx.room.localParticipant.publishTrack(sessionData.audioTrack);
     console.log('🎵 Basic AI audio track published to room');
+  }
+
+  /**
+   * Set up OpenAI Speech-to-Text processing
+   */
+  setupOpenAISTT(track, sessionData) {
+    // Buffer audio data for OpenAI Whisper processing
+    let audioBuffer = [];
+    const bufferDuration = 3000; // 3 seconds
+    
+    track.on('audioFrame', async (frame) => {
+      if (sessionData.isListening && !sessionData.isAISpeaking) {
+        audioBuffer.push(frame.data);
+        
+        // Process buffer every 3 seconds
+        if (audioBuffer.length > bufferDuration / 40) { // 40ms frames
+          try {
+            const audioData = Buffer.concat(audioBuffer);
+            const transcript = await this.processOpenAISTT(audioData);
+            
+            if (transcript && transcript.trim().length > 0) {
+              await this.processUserResponse(transcript, sessionData);
+            }
+            
+            audioBuffer = []; // Clear buffer
+          } catch (error) {
+            console.error('❌ OpenAI STT processing error:', error);
+          }
+        }
+      }
+    });
+  }
+
+  /**
+   * Set up Google Speech-to-Text processing
+   */
+  setupGoogleSTT(track, recognizeStream, sessionData) {
+    track.on('audioFrame', (frame) => {
+      if (sessionData.isListening && !sessionData.isAISpeaking) {
+        try {
+          recognizeStream.write(frame.data);
+        } catch (error) {
+          console.error('❌ Error writing to Google STT stream:', error);
+        }
+      }
+    });
+  }
+
+  /**
+   * Process audio with OpenAI Whisper
+   */
+  async processOpenAISTT(audioData) {
+    try {
+      // Convert audio data to format suitable for OpenAI Whisper
+      const formData = new FormData();
+      const audioBlob = new Blob([audioData], { type: 'audio/wav' });
+      formData.append('file', audioBlob, 'audio.wav');
+      formData.append('model', 'whisper-1');
+      formData.append('language', 'en');
+
+      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.openaiApiKey}`
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error(`OpenAI API error: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.text;
+
+    } catch (error) {
+      console.error('❌ OpenAI Whisper error:', error);
+      return null;
+    }
   }
 
   /**
@@ -436,7 +500,7 @@ export class MultiProviderAIInterviewAgent {
       
       console.log(`🗣️ ${this.provider.toUpperCase()} AI speaking: "${text.substring(0, 50)}..."`);
       
-      if (this.provider === 'openai' && this.ttsModel) {
+      if (this.provider === 'openai' && this.useOpenAI) {
         await this.speakWithOpenAI(text, sessionData);
       } else if (this.provider === 'google' && this.ttsClient) {
         await this.speakWithGoogle(text, sessionData);
@@ -464,10 +528,28 @@ export class MultiProviderAIInterviewAgent {
    */
   async speakWithOpenAI(text, sessionData) {
     try {
-      const audioStream = await this.ttsModel.synthesize(text);
+      const response = await fetch('https://api.openai.com/v1/audio/speech', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.openaiApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'tts-1',
+          voice: 'nova',
+          input: text,
+          response_format: 'wav'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`OpenAI TTS API error: ${response.status}`);
+      }
+
+      const audioBuffer = await response.arrayBuffer();
       
-      if (sessionData.audioTrack && audioStream) {
-        await this.playAudioStream(audioStream, sessionData);
+      if (sessionData.audioSource && audioBuffer) {
+        await this.playAudioBuffer(new Uint8Array(audioBuffer), sessionData);
       }
       
     } catch (error) {
@@ -493,8 +575,8 @@ export class MultiProviderAIInterviewAgent {
         }
       });
       
-      if (sessionData.audioTrack && response.audioContent) {
-        await this.playAudioBuffer(response.audioContent, sessionData);
+      if (sessionData.audioSource && response.audioContent) {
+        await this.playAudioBuffer(new Uint8Array(response.audioContent), sessionData);
       }
       
     } catch (error) {
@@ -503,38 +585,31 @@ export class MultiProviderAIInterviewAgent {
   }
 
   /**
-   * Play audio stream through LiveKit
+   * Play audio buffer through LiveKit audio source
    */
-  async playAudioStream(audioStream, sessionData) {
+  async playAudioBuffer(audioData, sessionData) {
     try {
-      // Convert stream to buffer and play
-      const chunks = [];
-      for await (const chunk of audioStream) {
-        chunks.push(chunk);
+      if (!sessionData.audioSource) {
+        console.error('❌ No audio source available');
+        return;
       }
-      const audioBuffer = Buffer.concat(chunks);
-      await this.playAudioBuffer(audioBuffer, sessionData);
-      
-    } catch (error) {
-      console.error('❌ Error playing audio stream:', error);
-    }
-  }
 
-  /**
-   * Play audio buffer through LiveKit
-   */
-  async playAudioBuffer(audioBuffer, sessionData) {
-    try {
-      const audioData = new Uint8Array(audioBuffer);
-      const frameSize = 1920; // 40ms at 48kHz
+      // Convert audio data to 16-bit PCM format for LiveKit
+      const frameSize = 1920; // 40ms at 48kHz mono
       
-      for (let i = 0; i < audioData.length; i += frameSize) {
-        const frameData = audioData.slice(i, i + frameSize);
-        const audioFrame = new AudioFrame(frameData, 48000, 1, frameData.length / 2);
+      for (let i = 0; i < audioData.length; i += frameSize * 2) {
+        const frameData = audioData.slice(i, i + frameSize * 2);
         
-        if (sessionData.audioTrack) {
-          await sessionData.audioTrack.publishAudioFrame(audioFrame);
+        // Convert to Float32Array for LiveKit audio source
+        const floatData = new Float32Array(frameSize);
+        for (let j = 0; j < frameSize && j * 2 < frameData.length; j++) {
+          // Convert 16-bit PCM to float (-1.0 to 1.0)
+          const sample = (frameData[j * 2] | (frameData[j * 2 + 1] << 8));
+          floatData[j] = sample / 32768.0;
         }
+        
+        // Send audio frame to LiveKit
+        await sessionData.audioSource.captureFrame(floatData);
         
         // Small delay to maintain real-time playback
         await new Promise(resolve => setTimeout(resolve, 40));
@@ -692,12 +767,7 @@ Provide constructive, positive feedback that acknowledges their response and tra
 
       let feedback;
 
-      if (this.provider === 'openai' && this.llmModel) {
-        const result = await this.llmModel.chat([
-          { role: 'user', content: prompt }
-        ]);
-        feedback = result.content.trim();
-      } else if (this.provider === 'google' && this.geminiModel) {
+      if (this.provider === 'google' && this.geminiModel) {
         const result = await this.geminiModel.generateContent(prompt);
         feedback = result.response.text().trim();
       } else {
