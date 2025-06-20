@@ -635,6 +635,9 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
 
   const progress = simulator.getProgress();
 
+  // Safe participant count with null checks
+  const participantCount = room?.participants?.size ?? 0;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
       <div className="container mx-auto px-4 py-6">
@@ -888,7 +891,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
 
               <div className="flex items-center space-x-3">
                 <div className="text-sm text-gray-600">
-                  Participants: {room?.participants.size || 0}
+                  Participants: {participantCount}
                 </div>
                 <Users className="w-5 h-5 text-gray-400" />
               </div>
