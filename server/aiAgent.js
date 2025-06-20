@@ -265,6 +265,16 @@ export class MultiProviderAIInterviewAgent {
   async setupOpenAIAudioProcessing(ctx, sessionData) {
     const { room } = ctx;
     
+    // Create and publish audio track for AI speech output
+    sessionData.audioTrack = await ctx.room.localParticipant.createAudioTrack({
+      source: 'microphone',
+      name: 'ai-speech'
+    });
+    
+    // CRITICAL: Publish the audio track so participants can hear the AI
+    await ctx.room.localParticipant.publishTrack(sessionData.audioTrack);
+    console.log('🎵 AI audio track published to room');
+    
     // Set up OpenAI STT
     if (this.sttModel) {
       room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
@@ -286,13 +296,6 @@ export class MultiProviderAIInterviewAgent {
         }
       });
     }
-
-    // Set up audio output
-    sessionData.audioTrack = ctx.room.localParticipant.publishTrack(
-      new LocalAudioTrack('ai-speech', {
-        source: 'microphone'
-      })
-    );
   }
 
   /**
@@ -300,6 +303,16 @@ export class MultiProviderAIInterviewAgent {
    */
   async setupGoogleAudioProcessing(ctx, sessionData) {
     const { room } = ctx;
+    
+    // Create and publish audio track for AI speech output
+    sessionData.audioTrack = await ctx.room.localParticipant.createAudioTrack({
+      source: 'microphone',
+      name: 'ai-speech'
+    });
+    
+    // CRITICAL: Publish the audio track so participants can hear the AI
+    await ctx.room.localParticipant.publishTrack(sessionData.audioTrack);
+    console.log('🎵 AI audio track published to room');
     
     // Set up Google Speech-to-Text
     if (this.speechClient) {
@@ -338,13 +351,6 @@ export class MultiProviderAIInterviewAgent {
 
       sessionData.recognizeStream = recognizeStream;
     }
-
-    // Set up audio output
-    sessionData.audioTrack = ctx.room.localParticipant.publishTrack(
-      new LocalAudioTrack('ai-speech', {
-        source: 'microphone'
-      })
-    );
   }
 
   /**
@@ -353,12 +359,15 @@ export class MultiProviderAIInterviewAgent {
   async setupBasicAudioProcessing(ctx, sessionData) {
     console.log('⚠️ Using basic audio processing (no STT/TTS)');
     
-    // Set up basic audio output
-    sessionData.audioTrack = ctx.room.localParticipant.publishTrack(
-      new LocalAudioTrack('ai-speech', {
-        source: 'microphone'
-      })
-    );
+    // Create and publish audio track for basic audio output
+    sessionData.audioTrack = await ctx.room.localParticipant.createAudioTrack({
+      source: 'microphone',
+      name: 'ai-speech'
+    });
+    
+    // CRITICAL: Publish the audio track so participants can hear the AI
+    await ctx.room.localParticipant.publishTrack(sessionData.audioTrack);
+    console.log('🎵 Basic AI audio track published to room');
   }
 
   /**

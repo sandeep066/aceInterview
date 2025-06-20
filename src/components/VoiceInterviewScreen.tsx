@@ -121,6 +121,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
 
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
+  const audioElementsRef = useRef<HTMLAudioElement[]>([]);
 
   // Auto-scroll conversation to bottom
   useEffect(() => {
@@ -151,6 +152,73 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       return () => clearInterval(interval);
     }
   }, [localAudioTrack]);
+
+  // CRITICAL: Handle remote audio tracks (AI voice output)
+  useEffect(() => {
+    console.log('[VoiceInterview] Remote audio tracks changed:', remoteAudioTracks.length);
+    
+    // Clean up existing audio elements
+    audioElementsRef.current.forEach(audio => {
+      audio.pause();
+      audio.srcObject = null;
+    });
+    audioElementsRef.current = [];
+
+    // Create audio elements for each remote track
+    remoteAudioTracks.forEach((track, index) => {
+      console.log(`[VoiceInterview] 🎵 Setting up audio element for remote track ${index}`);
+      
+      const audioElement = document.createElement('audio');
+      audioElement.autoplay = true;
+      audioElement.playsInline = true;
+      audioElement.controls = false;
+      
+      // Get the MediaStreamTrack from the RemoteAudioTrack
+      const mediaStreamTrack = track.mediaStreamTrack;
+      if (mediaStreamTrack) {
+        const mediaStream = new MediaStream([mediaStreamTrack]);
+        audioElement.srcObject = mediaStream;
+        
+        audioElement.onloadedmetadata = () => {
+          console.log(`[VoiceInterview] ✅ Audio element ${index} ready to play`);
+          audioElement.play().catch(error => {
+            console.error(`[VoiceInterview] ❌ Failed to play audio element ${index}:`, error);
+          });
+        };
+        
+        audioElement.onplay = () => {
+          console.log(`[VoiceInterview] 🔊 Audio element ${index} started playing`);
+          setIsAISpeaking(true);
+        };
+        
+        audioElement.onended = () => {
+          console.log(`[VoiceInterview] 🔇 Audio element ${index} finished playing`);
+          setIsAISpeaking(false);
+        };
+        
+        audioElement.onerror = (error) => {
+          console.error(`[VoiceInterview] ❌ Audio element ${index} error:`, error);
+        };
+        
+        // Add to DOM (hidden) and track reference
+        audioElement.style.display = 'none';
+        document.body.appendChild(audioElement);
+        audioElementsRef.current.push(audioElement);
+      }
+    });
+
+    // Cleanup function
+    return () => {
+      audioElementsRef.current.forEach(audio => {
+        audio.pause();
+        audio.srcObject = null;
+        if (audio.parentNode) {
+          audio.parentNode.removeChild(audio);
+        }
+      });
+      audioElementsRef.current = [];
+    };
+  }, [remoteAudioTracks]);
 
   // Update connection status based on LiveKit state
   useEffect(() => {
@@ -204,6 +272,12 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
           setStartTime(Date.now());
           setIsThinking(false);
           
+          // CRITICAL: Start audio immediately for conversational mode
+          if (voiceSession.conversationalMode) {
+            console.log('[VoiceInterview] 🎤 Starting audio for conversational mode');
+            await startAudio();
+          }
+          
           console.log('[VoiceInterview] ✅ Voice interview started successfully');
           
           // If conversational mode is enabled, the AI agent will handle the flow
@@ -231,20 +305,48 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         }
       }, 1000);
     }
-  }, [voiceSession, livekitReady, connectLiveKit]);
+  }, [voiceSession, livekitReady, connectLiveKit, startAudio]);
 
-  // Listen for remote audio data (AI responses) in conversational mode
+  // Listen for user speech in conversational mode
   useEffect(() => {
-    if (conversationalMode && remoteAudioTracks.length > 0) {
-      console.log(`[VoiceInterview] 🎵 ${agentProvider.toUpperCase()} AI audio received in conversational mode`);
-      setIsAISpeaking(true);
-      
-      // The AI agent manages its own listening state
-      setTimeout(() => {
-        setIsAISpeaking(false);
-      }, 3000);
+    if (conversationalMode && isInterviewActive && !isAISpeaking) {
+      // In conversational mode, continuously listen for user input
+      if (speechSupported && !isListening) {
+        console.log('[VoiceInterview] 👂 Starting continuous listening in conversational mode');
+        startListening();
+        setUserSpeaking(true);
+      }
+    } else if (isListening) {
+      // Stop listening when AI is speaking or interview is not active
+      console.log('[VoiceInterview] 🔇 Stopping listening - AI speaking or interview inactive');
+      stopListening();
+      setUserSpeaking(false);
     }
-  }, [conversationalMode, remoteAudioTracks, agentProvider]);
+  }, [conversationalMode, isInterviewActive, isAISpeaking, speechSupported, isListening, startListening, stopListening]);
+
+  // Handle transcript updates in conversational mode
+  useEffect(() => {
+    if (conversationalMode && transcript && transcript.trim().length > 10) {
+      // In conversational mode, automatically process longer transcripts
+      const words = transcript.trim().split(' ');
+      if (words.length >= 5) { // Process when user has said at least 5 words
+        console.log('[VoiceInterview] 📝 Auto-processing transcript in conversational mode:', transcript);
+        
+        // Add user response to conversation
+        setConversationHistory(prev => [...prev, {
+          speaker: 'user',
+          message: transcript,
+          timestamp: Date.now(),
+          type: 'response'
+        }]);
+        
+        // Reset transcript and continue listening
+        resetTranscript();
+        
+        // The AI agent will handle the response processing through LiveKit
+      }
+    }
+  }, [conversationalMode, transcript, resetTranscript]);
 
   const formatTime = (ms: number): string => {
     const minutes = Math.floor(ms / 60000);
@@ -328,7 +430,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     if (voiceSession) {
       try {
         await VoiceInterviewService.resumeInterview(voiceSession.sessionId);
-        if (livekitProps) {
+        if (livekitProps && conversationalMode) {
           await startAudio();
         }
         
@@ -636,11 +738,18 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                       <div className={`w-2 h-2 rounded-full animate-pulse ml-2 ${getProviderColor(agentProvider).split(' ')[1].replace('bg-', 'bg-').replace('100', '600')}`}></div>
                     </div>
                   )}
-                  {conversationalMode && !isAISpeaking && (
+                  {conversationalMode && !isAISpeaking && userSpeaking && (
                     <div className="flex items-center text-green-600 text-sm">
                       <User className="w-4 h-4 mr-1" />
-                      <span>AI Listening</span>
+                      <span>You're Speaking</span>
                       <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse ml-2"></div>
+                    </div>
+                  )}
+                  {conversationalMode && !isAISpeaking && !userSpeaking && (
+                    <div className="flex items-center text-blue-600 text-sm">
+                      <Mic className="w-4 h-4 mr-1" />
+                      <span>AI Listening</span>
+                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse ml-2"></div>
                     </div>
                   )}
                 </div>
@@ -892,6 +1001,13 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                     <span className={`flex items-center ${localAudioTrack ? 'text-green-600' : 'text-gray-600'}`}>
                       {localAudioTrack ? <CheckCircle className="w-4 h-4 mr-1" /> : <XCircle className="w-4 h-4 mr-1" />}
                       {localAudioTrack ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-700">Remote Audio:</span>
+                    <span className={`flex items-center ${remoteAudioTracks.length > 0 ? 'text-green-600' : 'text-gray-600'}`}>
+                      {remoteAudioTracks.length > 0 ? <CheckCircle className="w-4 h-4 mr-1" /> : <XCircle className="w-4 h-4 mr-1" />}
+                      {remoteAudioTracks.length} tracks
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
