@@ -1,5 +1,4 @@
 import { WorkerOptions, cli, defineAgent } from '@livekit/agents';
-import { Room, RoomEvent } from 'livekit-server-sdk';
 import WebSocket from 'ws';
 import { Readable } from 'stream';
 import dotenv from 'dotenv';
@@ -154,11 +153,11 @@ export class MultiProviderAIInterviewAgent {
       return new Promise((resolve) => {
         const onParticipantConnected = () => {
           console.log('👤 Participant joined the room');
-          room.off(RoomEvent.ParticipantConnected, onParticipantConnected);
+          room.off('participantConnected', onParticipantConnected);
           resolve();
         };
         
-        room.on(RoomEvent.ParticipantConnected, onParticipantConnected);
+        room.on('participantConnected', onParticipantConnected);
       });
     }
   }
@@ -264,7 +263,7 @@ export class MultiProviderAIInterviewAgent {
     console.log('🎵 OpenAI AI audio track published to room');
     
     // Set up audio frame processing for STT
-    room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+    room.on('trackSubscribed', (track, publication, participant) => {
       if (track.kind === 'audio' && participant.identity !== 'ai-interviewer') {
         console.log('🎤 Subscribed to participant audio track (OpenAI STT)');
         
@@ -319,7 +318,7 @@ export class MultiProviderAIInterviewAgent {
         });
 
       // Listen for audio from participants
-      room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+      room.on('trackSubscribed', (track, publication, participant) => {
         if (track.kind === 'audio' && participant.identity !== 'ai-interviewer') {
           console.log('🎤 Subscribed to participant audio track (Google STT)');
           
