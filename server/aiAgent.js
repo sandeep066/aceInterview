@@ -1,5 +1,5 @@
 import { WorkerOptions, cli, defineAgent } from '@livekit/agents';
-import { Room, RoomEvent, RemoteAudioTrack, LocalAudioTrack } from 'livekit-server-sdk';
+import { Room, RoomEvent } from 'livekit-server-sdk';
 import WebSocket from 'ws';
 import { Readable } from 'stream';
 import dotenv from 'dotenv';
@@ -458,6 +458,13 @@ export class MultiProviderAIInterviewAgent {
     const greeting = this.createGreeting(sessionData.config);
     await this.speakText(greeting, sessionData);
     
+    // Send greeting as data message to frontend
+    await this.sendDataMessage(ctx, {
+      type: 'greeting',
+      text: greeting,
+      timestamp: Date.now()
+    });
+    
     // Add to conversation history
     sessionData.conversationHistory.push({
       speaker: 'ai',
@@ -470,6 +477,20 @@ export class MultiProviderAIInterviewAgent {
     sessionData.isListening = true;
     
     console.log(`🎙️ Interview flow started with ${this.provider.toUpperCase()}, waiting for participant response`);
+  }
+
+  /**
+   * Send data message to frontend
+   */
+  async sendDataMessage(ctx, data) {
+    try {
+      const message = JSON.stringify(data);
+      const encoder = new TextEncoder();
+      await ctx.room.localParticipant.publishData(encoder.encode(message));
+      console.log('📨 Data message sent to frontend:', data.type);
+    } catch (error) {
+      console.error('❌ Error sending data message:', error);
+    }
   }
 
   /**
@@ -721,7 +742,7 @@ export class MultiProviderAIInterviewAgent {
   /**
    * Ask the next question
    */
-  async askNextQuestion(sessionData) {
+  async askNextQuestion(sessionData, ctx) {
     try {
       let question;
       
@@ -737,6 +758,16 @@ export class MultiProviderAIInterviewAgent {
       sessionData.currentQuestionIndex++;
       
       await this.speakText(question, sessionData);
+      
+      // Send question as data message to frontend
+      if (ctx) {
+        await this.sendDataMessage(ctx, {
+          type: 'question',
+          text: question,
+          questionNumber: sessionData.currentQuestionIndex,
+          timestamp: Date.now()
+        });
+      }
       
       sessionData.conversationHistory.push({
         speaker: 'ai',
