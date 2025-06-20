@@ -19,15 +19,10 @@ import {
   PhoneOff,
   Users,
   Signal,
-  Bot,
-  User,
-  Zap,
-  CheckCircle,
-  XCircle,
-  Brain,
+  StopCircle,
   Settings,
-  Cpu,
-  StopCircle
+  Brain,
+  Zap
 } from 'lucide-react';
 import { InterviewConfig } from '../types';
 import { AIInterviewSimulator } from '../utils/aiSimulator';
@@ -57,20 +52,18 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   const [audioLevel, setAudioLevel] = useState(0);
   const [participantName] = useState(`participant-${Date.now()}`);
   const [livekitReady, setLivekitReady] = useState(false);
-  const [conversationalMode, setConversationalMode] = useState(false);
-  const [aiAgentEnabled, setAiAgentEnabled] = useState(false);
-  const [agentProvider, setAgentProvider] = useState<string>('google');
-  const [selectedProvider, setSelectedProvider] = useState<'openai' | 'google'>('google');
-  const [showProviderSelection, setShowProviderSelection] = useState(false);
-  const [conversationHistory, setConversationHistory] = useState<Array<{
-    speaker: 'ai' | 'user';
-    message: string;
-    timestamp: number;
-    type?: 'greeting' | 'question' | 'response' | 'feedback';
-  }>>([]);
+  const [showEndConfirmation, setShowEndConfirmation] = useState(false);
+  const [conversationHistory, setConversationHistory] = useState<any[]>([]);
   const [isAISpeaking, setIsAISpeaking] = useState(false);
   const [userSpeaking, setUserSpeaking] = useState(false);
-  const [showEndConfirmation, setShowEndConfirmation] = useState(false);
+  const [aiAgentStatus, setAiAgentStatus] = useState<any>(null);
+  const [selectedProvider, setSelectedProvider] = useState<'openai' | 'google'>('google');
+  const [showProviderSelection, setShowProviderSelection] = useState(false);
+  
+  // Audio management refs
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const speechSynthesisRef = useRef<SpeechSynthesis | null>(null);
   
   const {
     isListening,
@@ -121,15 +114,44 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   });
 
   const notesRef = useRef<HTMLTextAreaElement>(null);
-  const conversationRef = useRef<HTMLDivElement>(null);
-  const audioElementsRef = useRef<HTMLAudioElement[]>([]);
 
-  // Auto-scroll conversation to bottom
+  // Initialize audio context and speech synthesis
   useEffect(() => {
-    if (conversationRef.current) {
-      conversationRef.current.scrollTop = conversationRef.current.scrollHeight;
-    }
-  }, [conversationHistory]);
+    const initializeAudio = async () => {
+      try {
+        // Initialize AudioContext for better audio control
+        if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+          console.log('🎵 AudioContext initialized');
+        }
+
+        // Initialize Speech Synthesis for fallback TTS
+        if ('speechSynthesis' in window) {
+          speechSynthesisRef.current = window.speechSynthesis;
+          console.log('🗣️ Speech Synthesis initialized');
+        }
+
+      } catch (error) {
+        console.error('❌ Error initializing audio:', error);
+      }
+    };
+
+    initializeAudio();
+
+    return () => {
+      // Cleanup audio elements
+      audioElementsRef.current.forEach(audio => {
+        audio.pause();
+        audio.remove();
+      });
+      audioElementsRef.current.clear();
+
+      // Close audio context
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
 
   // Timer effect
   useEffect(() => {
@@ -142,6 +164,106 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     return () => clearInterval(interval);
   }, [isInterviewActive, startTime]);
 
+  // Enhanced remote audio track handling with proper audio playback
+  useEffect(() => {
+    if (remoteAudioTracks.length > 0) {
+      console.log(`🎵 Processing ${remoteAudioTracks.length} remote audio tracks`);
+      
+      remoteAudioTracks.forEach((track, index) => {
+        const trackId = track.sid || `track-${index}`;
+        
+        // Check if we already have an audio element for this track
+        if (!audioElementsRef.current.has(trackId)) {
+          console.log(`🎵 Creating new audio element for track: ${trackId}`);
+          
+          // Create audio element
+          const audioElement = document.createElement('audio');
+          audioElement.autoplay = true;
+          audioElement.playsInline = true;
+          audioElement.volume = 1.0;
+          
+          // Set up event listeners
+          audioElement.onplay = () => {
+            console.log(`🎵 Audio started playing for track: ${trackId}`);
+            setIsAISpeaking(true);
+            setUserSpeaking(false);
+            // Stop user listening when AI starts speaking
+            if (isListening) {
+              stopListening();
+            }
+          };
+          
+          audioElement.onended = () => {
+            console.log(`🎵 Audio ended for track: ${trackId}`);
+            setIsAISpeaking(false);
+            // Resume listening after AI finishes speaking
+            setTimeout(() => {
+              if (isInterviewActive && !isListening) {
+                startListening();
+                setUserSpeaking(false);
+              }
+            }, 500);
+          };
+          
+          audioElement.onpause = () => {
+            console.log(`🎵 Audio paused for track: ${trackId}`);
+            setIsAISpeaking(false);
+          };
+          
+          audioElement.onerror = (error) => {
+            console.error(`❌ Audio error for track ${trackId}:`, error);
+            setIsAISpeaking(false);
+          };
+          
+          audioElement.onloadstart = () => {
+            console.log(`🎵 Audio loading started for track: ${trackId}`);
+          };
+          
+          audioElement.oncanplay = () => {
+            console.log(`🎵 Audio can play for track: ${trackId}`);
+          };
+          
+          // Attach the track to the audio element
+          try {
+            track.attach(audioElement);
+            console.log(`🎵 Track attached to audio element: ${trackId}`);
+            
+            // Add to DOM (hidden)
+            audioElement.style.display = 'none';
+            document.body.appendChild(audioElement);
+            
+            // Store reference
+            audioElementsRef.current.set(trackId, audioElement);
+            
+            // Force play if needed (handle autoplay restrictions)
+            const playPromise = audioElement.play();
+            if (playPromise) {
+              playPromise.catch(error => {
+                console.warn(`⚠️ Autoplay prevented for track ${trackId}:`, error);
+                // User interaction required for autoplay
+              });
+            }
+            
+          } catch (attachError) {
+            console.error(`❌ Error attaching track ${trackId}:`, attachError);
+          }
+        }
+      });
+    }
+
+    // Cleanup removed tracks
+    const currentTrackIds = new Set(remoteAudioTracks.map((track, index) => track.sid || `track-${index}`));
+    audioElementsRef.current.forEach((audioElement, trackId) => {
+      if (!currentTrackIds.has(trackId)) {
+        console.log(`🗑️ Cleaning up audio element for removed track: ${trackId}`);
+        audioElement.pause();
+        audioElement.remove();
+        audioElementsRef.current.delete(trackId);
+      }
+    });
+
+  }, [remoteAudioTracks, isListening, stopListening, startListening, isInterviewActive]);
+
   // Audio level monitoring
   useEffect(() => {
     if (localAudioTrack) {
@@ -153,112 +275,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       return () => clearInterval(interval);
     }
   }, [localAudioTrack]);
-
-  // CRITICAL: Handle remote audio tracks (AI voice output) - FIXED
-  useEffect(() => {
-    console.log('[VoiceInterview] 🎵 Remote audio tracks changed:', remoteAudioTracks.length);
-    
-    // Clean up existing audio elements
-    audioElementsRef.current.forEach(audio => {
-      audio.pause();
-      audio.srcObject = null;
-      if (audio.parentNode) {
-        audio.parentNode.removeChild(audio);
-      }
-    });
-    audioElementsRef.current = [];
-
-    // Create audio elements for each remote track
-    remoteAudioTracks.forEach((track, index) => {
-      console.log(`[VoiceInterview] 🎵 Setting up audio element for remote track ${index}`);
-      
-      const audioElement = document.createElement('audio');
-      audioElement.autoplay = true;
-      audioElement.playsInline = true;
-      audioElement.controls = false;
-      audioElement.volume = 1.0; // Ensure full volume
-      
-      // CRITICAL: Get the MediaStreamTrack from the RemoteAudioTrack
-      const mediaStreamTrack = track.mediaStreamTrack;
-      if (mediaStreamTrack) {
-        const mediaStream = new MediaStream([mediaStreamTrack]);
-        audioElement.srcObject = mediaStream;
-        
-        // Enhanced event handling for better audio playback
-        audioElement.onloadedmetadata = () => {
-          console.log(`[VoiceInterview] ✅ Audio element ${index} metadata loaded`);
-          
-          // Attempt to play immediately
-          const playPromise = audioElement.play();
-          if (playPromise !== undefined) {
-            playPromise
-              .then(() => {
-                console.log(`[VoiceInterview] ✅ Audio element ${index} playing successfully`);
-              })
-              .catch(error => {
-                console.error(`[VoiceInterview] ❌ Failed to play audio element ${index}:`, error);
-                
-                // Try to enable audio on user interaction
-                if (error.name === 'NotAllowedError') {
-                  console.log('[VoiceInterview] 🔊 Audio blocked by browser policy, will retry on user interaction');
-                }
-              });
-          }
-        };
-        
-        audioElement.onplay = () => {
-          console.log(`[VoiceInterview] 🔊 Audio element ${index} started playing`);
-          setIsAISpeaking(true);
-        };
-        
-        audioElement.onended = () => {
-          console.log(`[VoiceInterview] 🔇 Audio element ${index} finished playing`);
-          setIsAISpeaking(false);
-        };
-        
-        audioElement.onpause = () => {
-          console.log(`[VoiceInterview] ⏸️ Audio element ${index} paused`);
-          setIsAISpeaking(false);
-        };
-        
-        audioElement.onerror = (error) => {
-          console.error(`[VoiceInterview] ❌ Audio element ${index} error:`, error);
-          setIsAISpeaking(false);
-        };
-        
-        audioElement.oncanplay = () => {
-          console.log(`[VoiceInterview] 🎵 Audio element ${index} can play`);
-        };
-        
-        audioElement.oncanplaythrough = () => {
-          console.log(`[VoiceInterview] 🎵 Audio element ${index} can play through`);
-        };
-        
-        // Add to DOM (hidden) and track reference
-        audioElement.style.display = 'none';
-        audioElement.style.position = 'absolute';
-        audioElement.style.left = '-9999px';
-        document.body.appendChild(audioElement);
-        audioElementsRef.current.push(audioElement);
-        
-        console.log(`[VoiceInterview] 🎵 Audio element ${index} added to DOM`);
-      } else {
-        console.error(`[VoiceInterview] ❌ No mediaStreamTrack found for remote track ${index}`);
-      }
-    });
-
-    // Cleanup function
-    return () => {
-      audioElementsRef.current.forEach(audio => {
-        audio.pause();
-        audio.srcObject = null;
-        if (audio.parentNode) {
-          audio.parentNode.removeChild(audio);
-        }
-      });
-      audioElementsRef.current = [];
-    };
-  }, [remoteAudioTracks]);
 
   // Update connection status based on LiveKit state
   useEffect(() => {
@@ -281,27 +297,8 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   useEffect(() => {
     if (voiceSession && voiceSession.participantToken && !livekitReady) {
       console.log('[VoiceInterview] Session ready, preparing LiveKit connection');
-      console.log('[VoiceInterview] AI Agent enabled:', voiceSession.aiAgentEnabled);
-      console.log('[VoiceInterview] Conversational mode:', voiceSession.conversationalMode);
-      console.log('[VoiceInterview] Agent provider:', voiceSession.agentProvider || 'google');
-      
       setLivekitReady(true);
-      setAiAgentEnabled(voiceSession.aiAgentEnabled || false);
-      setConversationalMode(voiceSession.conversationalMode || false);
-      setAgentProvider(voiceSession.agentProvider || 'google');
       
-      // Add initial greeting to conversation history if AI agent is enabled
-      if (voiceSession.aiAgentEnabled) {
-        const providerName = voiceSession.agentProvider === 'openai' ? 'OpenAI' : 'Google AI';
-        setConversationHistory([{
-          speaker: 'ai',
-          message: `Hello! I'm your ${providerName} interviewer. I'll be conducting your interview today using advanced speech recognition and natural language processing. Please wait a moment while I prepare...`,
-          timestamp: Date.now(),
-          type: 'greeting'
-        }]);
-      }
-      
-      // Small delay to ensure state is fully updated
       setTimeout(async () => {
         try {
           console.log('[VoiceInterview] ========== ATTEMPTING LIVEKIT CONNECTION ==========');
@@ -312,85 +309,105 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
           setStartTime(Date.now());
           setIsThinking(false);
           
-          // CRITICAL: Start audio immediately for conversational mode
-          if (voiceSession.conversationalMode) {
-            console.log('[VoiceInterview] 🎤 Starting audio for conversational mode');
-            await startAudio();
-          }
+          // Start listening after connection
+          setTimeout(() => {
+            if (speechSupported && !isListening) {
+              startListening();
+              setUserSpeaking(true);
+            }
+          }, 1000);
           
           console.log('[VoiceInterview] ✅ Voice interview started successfully');
-          
-          // If conversational mode is enabled, the AI agent will handle the flow
-          if (voiceSession.conversationalMode) {
-            setTimeout(() => {
-              const providerName = voiceSession.agentProvider === 'openai' ? 'OpenAI' : 'Google AI';
-              console.log(`[VoiceInterview] 🎤 ${providerName} AI agent is managing the conversation flow`);
-              
-              // Add system message about AI management
-              setConversationHistory(prev => [...prev, {
-                speaker: 'ai',
-                message: `Perfect! I'm now ready to begin. The interview will flow naturally using ${providerName}'s advanced speech technology. Are you ready to start?`,
-                timestamp: Date.now(),
-                type: 'question'
-              }]);
-              
-            }, 3000);
-          }
-          
         } catch (connectError) {
           console.error('[VoiceInterview] ❌ Failed to connect to LiveKit:', connectError);
           setConnectionStatus('error');
           setIsThinking(false);
           alert(`Failed to connect to voice interview: ${connectError instanceof Error ? connectError.message : 'Unknown error'}`);
         }
-      }, 1000);
+      }, 200);
     }
-  }, [voiceSession, livekitReady, connectLiveKit, startAudio]);
+  }, [voiceSession, livekitReady, connectLiveKit, speechSupported, startListening, isListening]);
 
-  // CRITICAL: Manage continuous listening based on AI speaking state
+  // Handle transcript changes
   useEffect(() => {
-    if (conversationalMode && isInterviewActive) {
-      if (!isAISpeaking && speechSupported && !isListening) {
-        // Start listening when AI finishes speaking
-        console.log('[VoiceInterview] 👂 AI finished speaking, starting continuous listening');
-        startListening();
-        setUserSpeaking(true);
-      } else if (isAISpeaking && isListening) {
-        // Stop listening when AI starts speaking
-        console.log('[VoiceInterview] 🔇 AI started speaking, stopping listening');
-        stopListening();
-        setUserSpeaking(false);
-      }
-    } else if (!conversationalMode && isListening) {
-      // Stop listening if not in conversational mode
-      stopListening();
-      setUserSpeaking(false);
-    }
-  }, [conversationalMode, isInterviewActive, isAISpeaking, speechSupported, isListening, startListening, stopListening]);
-
-  // Handle transcript updates in conversational mode
-  useEffect(() => {
-    if (conversationalMode && transcript && transcript.trim().length > 10) {
-      // In conversational mode, automatically process longer transcripts
-      const words = transcript.trim().split(' ');
-      if (words.length >= 5) { // Process when user has said at least 5 words
-        console.log('[VoiceInterview] 📝 Auto-processing transcript in conversational mode:', transcript);
-        
-        // Add user response to conversation
+    if (transcript && transcript.trim().length > 0) {
+      setUserSpeaking(true);
+      
+      // Add user speech to conversation history
+      const lastEntry = conversationHistory[conversationHistory.length - 1];
+      if (!lastEntry || lastEntry.speaker !== 'user' || lastEntry.type !== 'speaking') {
         setConversationHistory(prev => [...prev, {
           speaker: 'user',
           message: transcript,
           timestamp: Date.now(),
-          type: 'response'
+          type: 'speaking'
         }]);
-        
-        // Reset transcript and continue listening
-        resetTranscript();
-        
-        // The AI agent will handle the response processing through LiveKit
+      } else {
+        // Update the last user entry
+        setConversationHistory(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            ...updated[updated.length - 1],
+            message: transcript,
+            timestamp: Date.now()
+          };
+          return updated;
+        });
       }
     }
-  }, [conversationalMode, transcript, resetTranscript]);
+  }, [transcript, conversationHistory]);
+
+  // Fallback Text-to-Speech function
+  const speakTextFallback = (text: string) => {
+    if (speechSynthesisRef.current) {
+      // Cancel any ongoing speech
+      speechSynthesisRef.current.cancel();
+      
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.9;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+      
+      // Try to use a female voice
+      const voices = speechSynthesisRef.current.getVoices();
+      const femaleVoice = voices.find(voice => 
+        voice.name.toLowerCase().includes('female') || 
+        voice.name.toLowerCase().includes('woman') ||
+        voice.name.toLowerCase().includes('samantha') ||
+        voice.name.toLowerCase().includes('karen')
+      );
+      
+      if (femaleVoice) {
+        utterance.voice = femaleVoice;
+      }
+      
+      utterance.onstart = () => {
+        console.log('🗣️ Fallback TTS started');
+        setIsAISpeaking(true);
+        if (isListening) {
+          stopListening();
+        }
+      };
+      
+      utterance.onend = () => {
+        console.log('🗣️ Fallback TTS ended');
+        setIsAISpeaking(false);
+        setTimeout(() => {
+          if (isInterviewActive && !isListening) {
+            startListening();
+          }
+        }, 500);
+      };
+      
+      utterance.onerror = (error) => {
+        console.error('❌ Fallback TTS error:', error);
+        setIsAISpeaking(false);
+      };
+      
+      speechSynthesisRef.current.speak(utterance);
+      console.log('🗣️ Speaking with fallback TTS:', text.substring(0, 50) + '...');
+    }
+  };
 
   const formatTime = (ms: number): string => {
     const minutes = Math.floor(ms / 60000);
@@ -402,45 +419,64 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     try {
       setIsThinking(true);
       setConnectionStatus('connecting');
+      setShowProviderSelection(false);
       
-      const providerName = selectedProvider === 'openai' ? 'OpenAI' : 'Google AI';
-      console.log(`[VoiceInterview] ========== STARTING ${providerName.toUpperCase()} VOICE INTERVIEW ==========`);
+      console.log('[VoiceInterview] ========== STARTING VOICE INTERVIEW ==========');
+      console.log('[VoiceInterview] Selected provider:', selectedProvider);
       
-      // Start voice interview session with selected AI agent provider
+      // Start voice interview session with selected provider
       const session = await VoiceInterviewService.startVoiceInterview(
         config, 
         participantName, 
         true, // enableAIAgent
         selectedProvider // agentProvider
       );
+      
       console.log('[VoiceInterview] Session received from backend:', session);
       
-      // Validate session data before proceeding
       if (!session.participantToken) {
         throw new Error('No participant token received from backend');
       }
       
-      console.log('[VoiceInterview] ✅ Session validation passed, setting voiceSession state');
-      
-      // Set the session - this will trigger the useEffect above to connect to LiveKit
+      // Set the session
       setVoiceSession(session);
+      setAiAgentStatus({
+        enabled: session.aiAgentEnabled,
+        provider: session.agentProvider,
+        conversational: session.conversationalMode
+      });
+      
+      // Add initial conversation entries
+      if (session.aiAgentEnabled) {
+        setConversationHistory([
+          {
+            speaker: 'ai',
+            message: `Hello! I'm your ${session.agentProvider?.toUpperCase() || 'AI'} interviewer. I'll be conducting your interview today using advanced speech recognition and natural language processing.`,
+            timestamp: Date.now(),
+            type: 'greeting'
+          },
+          {
+            speaker: 'ai',
+            message: "Perfect! I'm now ready to begin. The interview will flow naturally using Google AI's advanced speech technology. Are you ready to start?",
+            timestamp: Date.now() + 1000,
+            type: 'question'
+          }
+        ]);
+      }
       
     } catch (error) {
-      console.error(`[VoiceInterview] ❌ Error starting ${selectedProvider.toUpperCase()} voice interview:`, error);
-      
+      console.error('[VoiceInterview] ❌ Error starting voice interview:', error);
       setConnectionStatus('error');
       setIsThinking(false);
       
-      // Show user-friendly error message
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      alert(`Failed to start ${selectedProvider.toUpperCase()} voice interview: ${errorMessage}`);
+      alert(`Failed to start voice interview: ${errorMessage}`);
     }
   };
 
   const pauseInterview = async () => {
     setIsInterviewActive(false);
     stopListening();
-    setUserSpeaking(false);
     if (livekitProps) {
       stopAudio();
     }
@@ -448,14 +484,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     if (voiceSession) {
       try {
         await VoiceInterviewService.pauseInterview(voiceSession.sessionId);
-        
-        // Add pause message to conversation
-        setConversationHistory(prev => [...prev, {
-          speaker: 'ai',
-          message: 'Interview paused. Click resume when you\'re ready to continue.',
-          timestamp: Date.now(),
-          type: 'feedback'
-        }]);
       } catch (error) {
         console.error('[VoiceInterview] Error pausing interview:', error);
       }
@@ -468,30 +496,49 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     if (voiceSession) {
       try {
         await VoiceInterviewService.resumeInterview(voiceSession.sessionId);
-        if (livekitProps && conversationalMode) {
+        if (livekitProps) {
           await startAudio();
         }
-        
-        // Add resume message to conversation
-        const providerName = agentProvider === 'openai' ? 'OpenAI' : 'Google AI';
-        setConversationHistory(prev => [...prev, {
-          speaker: 'ai',
-          message: `Great! Let's continue with the interview. The ${providerName} agent is ready to proceed.`,
-          timestamp: Date.now(),
-          type: 'question'
-        }]);
+        if (speechSupported && !isListening) {
+          startListening();
+        }
       } catch (error) {
         console.error('[VoiceInterview] Error resuming interview:', error);
       }
     }
   };
 
-  const handleEndInterviewClick = () => {
-    if (conversationHistory.length > 2) {
-      setShowEndConfirmation(true);
-    } else {
-      endInterview();
+  const endInterview = async () => {
+    setIsInterviewActive(false);
+    stopListening();
+    
+    // Stop all audio
+    audioElementsRef.current.forEach(audio => {
+      audio.pause();
+    });
+    
+    if (speechSynthesisRef.current) {
+      speechSynthesisRef.current.cancel();
     }
+    
+    if (livekitProps) {
+      stopAudio();
+      disconnectLiveKit();
+    }
+    
+    if (voiceSession) {
+      try {
+        await VoiceInterviewService.endInterview(voiceSession.sessionId);
+      } catch (error) {
+        console.error('[VoiceInterview] Error ending interview:', error);
+      }
+    }
+    
+    onEndInterview(simulator);
+  };
+
+  const handleEndInterviewClick = () => {
+    setShowEndConfirmation(true);
   };
 
   const confirmEndInterview = () => {
@@ -503,35 +550,25 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     setShowEndConfirmation(false);
   };
 
-  const endInterview = async () => {
-    setIsInterviewActive(false);
-    stopListening();
-    setUserSpeaking(false);
-    if (livekitProps) {
-      stopAudio();
-      disconnectLiveKit();
-    }
-    
-    if (voiceSession) {
-      try {
-        await VoiceInterviewService.endInterview(voiceSession.sessionId);
-        
-        // Add completion message to conversation
-        const providerName = agentProvider === 'openai' ? 'OpenAI' : 'Google AI';
-        setConversationHistory(prev => [...prev, {
-          speaker: 'ai',
-          message: `Thank you for completing the interview with ${providerName}! I'll now generate your detailed analytics using advanced AI analysis.`,
-          timestamp: Date.now(),
-          type: 'feedback'
-        }]);
-      } catch (error) {
-        console.error('[VoiceInterview] Error ending interview:', error);
+  const toggleMicrophone = async () => {
+    if (isListening) {
+      stopListening();
+      setUserSpeaking(false);
+      if (livekitProps) {
+        stopAudio();
       }
+    } else {
+      if (livekitProps) {
+        await startAudio();
+      }
+      startListening();
+      setUserSpeaking(true);
     }
-    
-    // Mark simulator as ended early if needed
-    simulator.endInterviewEarly();
-    onEndInterview(simulator);
+  };
+
+  const testAudio = () => {
+    const testMessage = "This is a test of the audio system. If you can hear this, the audio is working correctly.";
+    speakTextFallback(testMessage);
   };
 
   const getConnectionStatusColor = () => {
@@ -552,17 +589,8 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     }
   };
 
-  const getProviderIcon = (provider: string) => {
-    return provider === 'openai' ? <Cpu className="w-4 h-4" /> : <Brain className="w-4 h-4" />;
-  };
-
-  const getProviderColor = (provider: string) => {
-    return provider === 'openai' ? 'text-green-600 bg-green-100' : 'text-purple-600 bg-purple-100';
-  };
-
   const progress = simulator.getProgress();
-  const participantCount = room?.participants?.size || 0;
-  
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
       <div className="container mx-auto px-4 py-6">
@@ -575,10 +603,9 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                   <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
                     <StopCircle className="w-8 h-8" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">End Interview Early?</h3>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">End Voice Interview?</h3>
                   <p className="text-gray-600 mb-6">
-                    You've been having a conversation with the AI interviewer. 
-                    Are you sure you want to end the interview now? You'll still receive analytics based on your conversation.
+                    Are you sure you want to end the voice interview? You'll receive analytics based on the conversation so far.
                   </p>
                   <div className="flex space-x-4">
                     <button
@@ -599,36 +626,96 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
             </div>
           )}
 
+          {/* Provider Selection Modal */}
+          {showProviderSelection && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-2xl p-8 max-w-md mx-4">
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Settings className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Choose AI Provider</h3>
+                  <p className="text-gray-600 mb-6">
+                    Select your preferred AI provider for the voice interview experience.
+                  </p>
+                  
+                  <div className="space-y-3 mb-6">
+                    <button
+                      onClick={() => setSelectedProvider('google')}
+                      className={`w-full p-4 rounded-xl border-2 transition-all ${
+                        selectedProvider === 'google' 
+                          ? 'border-purple-500 bg-purple-50' 
+                          : 'border-gray-200 hover:border-purple-300'
+                      }`}
+                    >
+                      <div className="flex items-center">
+                        <Brain className="w-6 h-6 text-purple-600 mr-3" />
+                        <div className="text-left">
+                          <div className="font-semibold text-gray-900">Google Cloud AI</div>
+                          <div className="text-sm text-gray-600">Advanced speech recognition & Gemini AI</div>
+                        </div>
+                      </div>
+                    </button>
+                    
+                    <button
+                      onClick={() => setSelectedProvider('openai')}
+                      className={`w-full p-4 rounded-xl border-2 transition-all ${
+                        selectedProvider === 'openai' 
+                          ? 'border-blue-500 bg-blue-50' 
+                          : 'border-gray-200 hover:border-blue-300'
+                      }`}
+                    >
+                      <div className="flex items-center">
+                        <Zap className="w-6 h-6 text-blue-600 mr-3" />
+                        <div className="text-left">
+                          <div className="font-semibold text-gray-900">OpenAI</div>
+                          <div className="text-sm text-gray-600">GPT-4 with Whisper speech processing</div>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                  
+                  <div className="flex space-x-4">
+                    <button
+                      onClick={() => setShowProviderSelection(false)}
+                      className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-xl hover:bg-gray-300 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={startVoiceInterview}
+                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+                    >
+                      Start Interview
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Header */}
           <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h1 className="text-2xl font-bold text-gray-900 flex items-center">
                   <Phone className="w-6 h-6 mr-2 text-blue-600" />
-                  AI Voice Interview - {config.style.charAt(0).toUpperCase() + config.style.slice(1).replace('-', ' ')}
-                  {aiAgentEnabled && (
-                    <span className={`ml-3 inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getProviderColor(agentProvider)}`}>
-                      {getProviderIcon(agentProvider)}
-                      <span className="ml-1">{agentProvider === 'openai' ? 'OpenAI' : 'Google AI'}</span>
-                    </span>
-                  )}
-                  {conversationalMode && (
-                    <span className="ml-2 inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      <Zap className="w-3 h-3 mr-1" />
-                      Conversational
-                    </span>
-                  )}
+                  Voice Interview - {config.style.charAt(0).toUpperCase() + config.style.slice(1).replace('-', ' ')}
                 </h1>
                 <p className="text-gray-600">Topic: {config.topic}</p>
                 {config.companyName && (
                   <p className="text-gray-600">Company: {config.companyName}</p>
                 )}
-                <p className="text-xs text-blue-600 mt-1">
-                  {aiAgentEnabled 
-                    ? `Powered by ${agentProvider === 'openai' ? 'OpenAI GPT-4, Whisper, and TTS' : 'Google Gemini AI, Speech-to-Text, and Text-to-Speech'}`
-                    : 'Manual voice control mode'
-                  }
-                </p>
+                {aiAgentStatus && (
+                  <div className="mt-2 flex items-center space-x-4 text-sm">
+                    <span className="text-purple-600">
+                      Powered by {aiAgentStatus.provider?.toUpperCase() || 'AI'} Agent
+                    </span>
+                    {aiAgentStatus.conversational && (
+                      <span className="text-green-600">Conversational Mode</span>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="text-right">
                 <div className="flex items-center text-lg font-semibold text-blue-600 mb-2">
@@ -653,62 +740,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
               </div>
             </div>
 
-            {/* Provider Selection */}
-            {!isInterviewActive && !voiceSession && (
-              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-medium text-blue-900">Choose AI Provider</h4>
-                  <button
-                    onClick={() => setShowProviderSelection(!showProviderSelection)}
-                    className="text-blue-600 hover:text-blue-800"
-                  >
-                    <Settings className="w-4 h-4" />
-                  </button>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => setSelectedProvider('openai')}
-                    className={`p-3 rounded-lg border-2 transition-all ${
-                      selectedProvider === 'openai'
-                        ? 'border-green-500 bg-green-50'
-                        : 'border-gray-200 hover:border-green-300'
-                    }`}
-                  >
-                    <div className="flex items-center mb-2">
-                      <Cpu className="w-5 h-5 mr-2 text-green-600" />
-                      <span className="font-medium text-gray-900">OpenAI</span>
-                    </div>
-                    <div className="text-xs text-gray-600">
-                      GPT-4 + Whisper + TTS
-                    </div>
-                  </button>
-                  
-                  <button
-                    onClick={() => setSelectedProvider('google')}
-                    className={`p-3 rounded-lg border-2 transition-all ${
-                      selectedProvider === 'google'
-                        ? 'border-purple-500 bg-purple-50'
-                        : 'border-gray-200 hover:border-purple-300'
-                    }`}
-                  >
-                    <div className="flex items-center mb-2">
-                      <Brain className="w-5 h-5 mr-2 text-purple-600" />
-                      <span className="font-medium text-gray-900">Google AI</span>
-                    </div>
-                    <div className="text-xs text-gray-600">
-                      Gemini + Cloud Speech
-                    </div>
-                  </button>
-                </div>
-                
-                <div className="mt-3 text-xs text-blue-700">
-                  Selected: <strong>{selectedProvider === 'openai' ? 'OpenAI' : 'Google AI'}</strong> - 
-                  This will be used for speech recognition, natural language processing, and text-to-speech.
-                </div>
-              </div>
-            )}
-
             {/* Error Display */}
             {connectionStatus === 'error' && livekitError && (
               <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -717,46 +748,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                   <div className="text-red-800 text-sm">
                     <p className="font-medium mb-1">Connection Error</p>
                     <p className="mb-2">{livekitError}</p>
-                    {voiceSession && (
-                      <p className="text-xs text-red-600">
-                        Using backend URL: {voiceSession.wsUrl}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* AI Agent Status */}
-            {aiAgentEnabled && (
-              <div className={`mb-4 p-4 border rounded-lg ${getProviderColor(agentProvider).replace('text-', 'border-').replace('bg-', 'bg-').replace('600', '200').replace('100', '50')}`}>
-                <div className="flex items-start">
-                  {getProviderIcon(agentProvider)}
-                  <div className={`ml-3 text-sm ${getProviderColor(agentProvider).split(' ')[0].replace('600', '800')}`}>
-                    <p className="font-medium mb-1">{agentProvider === 'openai' ? 'OpenAI' : 'Google AI'} Agent Active</p>
-                    <p className="mb-2">
-                      Your {agentProvider === 'openai' ? 'OpenAI' : 'Google AI'} interviewer is ready for continuous conversation using advanced speech recognition and natural language processing.
-                      {conversationalMode ? ' The interview will flow naturally with intelligent turn-taking!' : ' Use the microphone button to respond.'}
-                    </p>
-                    <div className="flex items-center space-x-4 text-xs">
-                      <span className="flex items-center">
-                        <CheckCircle className="w-3 h-3 mr-1 text-green-600" />
-                        {agentProvider === 'openai' ? 'GPT-4' : 'Gemini AI'}
-                      </span>
-                      <span className="flex items-center">
-                        <CheckCircle className="w-3 h-3 mr-1 text-green-600" />
-                        {agentProvider === 'openai' ? 'Whisper STT' : 'Speech-to-Text'}
-                      </span>
-                      <span className="flex items-center">
-                        <CheckCircle className="w-3 h-3 mr-1 text-green-600" />
-                        {agentProvider === 'openai' ? 'OpenAI TTS' : 'Text-to-Speech'}
-                      </span>
-                    </div>
-                    {voiceSession?.agentError && (
-                      <p className="text-xs mt-2">
-                        Note: {voiceSession.agentError}
-                      </p>
-                    )}
                   </div>
                 </div>
               </div>
@@ -766,16 +757,16 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
             <div className="mb-4">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm font-medium text-gray-700">
-                  Voice Interview Progress
+                  Question {progress.current} of {progress.total}
                 </span>
                 <span className="text-sm text-gray-600">
-                  {formatTime(elapsedTime)} / {config.duration} minutes
+                  {Math.round(progress.percentage)}% Complete
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${Math.min(100, (elapsedTime / (config.duration * 60 * 1000)) * 100)}%` }}
+                  style={{ width: `${progress.percentage}%` }}
                 />
               </div>
             </div>
@@ -784,20 +775,28 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 {!isInterviewActive ? (
-                  <button
-                    onClick={startVoiceInterview}
-                    disabled={isThinking}
-                    className="inline-flex items-center px-6 py-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-300 transition-all disabled:opacity-50"
-                  >
-                    {isThinking ? (
-                      <Loader className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      getProviderIcon(selectedProvider)
-                    )}
-                    <span className="ml-2">
-                      {startTime ? 'Resume' : 'Start'} {selectedProvider === 'openai' ? 'OpenAI' : 'Google AI'} Interview
-                    </span>
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setShowProviderSelection(true)}
+                      disabled={isThinking}
+                      className="inline-flex items-center px-6 py-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-300 transition-all disabled:opacity-50"
+                    >
+                      {isThinking ? (
+                        <Loader className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Phone className="w-4 h-4 mr-2" />
+                      )}
+                      {startTime ? 'Resume Voice Interview' : 'Start Voice Interview'}
+                    </button>
+                    
+                    <button
+                      onClick={testAudio}
+                      className="inline-flex items-center px-4 py-3 bg-purple-600 text-white font-semibold rounded-xl hover:bg-purple-700 focus:outline-none focus:ring-4 focus:ring-purple-300 transition-all"
+                    >
+                      <Volume2 className="w-4 h-4 mr-2" />
+                      Test Audio
+                    </button>
+                  </>
                 ) : (
                   <button
                     onClick={pauseInterview}
@@ -817,34 +816,9 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                 </button>
               </div>
 
-              <div className="flex items-center space-x-4">
-                {/* Speaking Status Indicators */}
-                <div className="flex items-center space-x-2">
-                  {isAISpeaking && (
-                    <div className={`flex items-center text-sm ${getProviderColor(agentProvider).split(' ')[0]}`}>
-                      {getProviderIcon(agentProvider)}
-                      <span className="ml-1">{agentProvider === 'openai' ? 'OpenAI' : 'Google AI'} Speaking</span>
-                      <div className={`w-2 h-2 rounded-full animate-pulse ml-2 ${getProviderColor(agentProvider).split(' ')[1].replace('bg-', 'bg-').replace('100', '600')}`}></div>
-                    </div>
-                  )}
-                  {conversationalMode && !isAISpeaking && userSpeaking && (
-                    <div className="flex items-center text-green-600 text-sm">
-                      <User className="w-4 h-4 mr-1" />
-                      <span>You're Speaking</span>
-                      <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse ml-2"></div>
-                    </div>
-                  )}
-                  {conversationalMode && !isAISpeaking && !userSpeaking && (
-                    <div className="flex items-center text-blue-600 text-sm">
-                      <Mic className="w-4 h-4 mr-1" />
-                      <span>AI Listening</span>
-                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse ml-2"></div>
-                    </div>
-                  )}
-                </div>
-                
+              <div className="flex items-center space-x-3">
                 <div className="text-sm text-gray-600">
-                  Participants: {participantCount}
+                  Participants: {room?.participants.size || 0}
                 </div>
                 <Users className="w-5 h-5 text-gray-400" />
               </div>
@@ -852,73 +826,81 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Live Conversation Display - REMOVED TEXT DISPLAY */}
+            {/* Live Conversation */}
             <div className="lg:col-span-2">
-              {/* Real-time Conversation Display */}
               <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                  <MessageCircle className={`w-5 h-5 mr-2 ${getProviderColor(agentProvider || selectedProvider).split(' ')[0]}`} />
-                  Live {(agentProvider || selectedProvider) === 'openai' ? 'OpenAI' : 'Google AI'} Conversation
-                  <span className="ml-2 text-sm text-green-600">(Voice Only)</span>
-                </h3>
-                
-                <div 
-                  ref={conversationRef}
-                  className="space-y-4 max-h-96 overflow-y-auto bg-gray-50 rounded-xl p-4"
-                >
-                  {conversationHistory.length === 0 ? (
-                    <div className="flex items-center justify-center h-32 text-gray-500">
-                      {getProviderIcon(selectedProvider)}
-                      <span className="ml-3">Click "Start {selectedProvider === 'openai' ? 'OpenAI' : 'Google AI'} Interview" to begin voice conversation</span>
-                    </div>
-                  ) : (
-                    conversationHistory.map((message, index) => (
-                      <div key={index} className={`flex ${message.speaker === 'ai' ? 'justify-start' : 'justify-end'}`}>
-                        <div className={`max-w-xs lg:max-w-md px-4 py-3 rounded-lg shadow-sm ${
-                          message.speaker === 'ai' 
-                            ? `${getProviderColor(agentProvider || selectedProvider).replace('text-', 'bg-').replace('600', '100')} ${getProviderColor(agentProvider || selectedProvider).replace('bg-', 'text-').replace('100', '900')} border-l-4 ${getProviderColor(agentProvider || selectedProvider).replace('text-', 'border-').replace('600', '500')}` 
-                            : 'bg-green-100 text-green-900 border-r-4 border-green-500'
-                        }`}>
-                          <div className="flex items-center mb-2">
-                            {message.speaker === 'ai' ? (
-                              getProviderIcon(agentProvider || selectedProvider)
-                            ) : (
-                              <User className="w-4 h-4 mr-2" />
-                            )}
-                            <span className="text-xs font-medium">
-                              {message.speaker === 'ai' ? `${(agentProvider || selectedProvider) === 'openai' ? 'OpenAI' : 'Google AI'} Interviewer` : 'You'}
-                            </span>
-                            {message.type && (
-                              <span className={`ml-2 text-xs px-2 py-1 rounded-full ${
-                                message.type === 'question' ? `${getProviderColor(agentProvider || selectedProvider).replace('text-', 'bg-').replace('600', '200')} ${getProviderColor(agentProvider || selectedProvider).replace('bg-', 'text-').replace('100', '800')}` :
-                                message.type === 'response' ? 'bg-green-200 text-green-800' :
-                                message.type === 'feedback' ? 'bg-yellow-200 text-yellow-800' :
-                                'bg-gray-200 text-gray-800'
+                <div className="flex items-center mb-4">
+                  <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center mr-4">
+                    <MessageCircle className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Live {aiAgentStatus?.provider?.toUpperCase() || 'AI'} Conversation</h3>
+                    <p className="text-sm text-gray-600 flex items-center">
+                      <span className="mr-2">(Real-time)</span>
+                      {isAISpeaking && (
+                        <span className="text-purple-600 flex items-center">
+                          <Volume2 className="w-4 h-4 mr-1" />
+                          AI Speaking
+                        </span>
+                      )}
+                      {userSpeaking && !isAISpeaking && (
+                        <span className="text-green-600 flex items-center">
+                          <Mic className="w-4 h-4 mr-1" />
+                          You're Speaking
+                        </span>
+                      )}
+                      {!isAISpeaking && !userSpeaking && isInterviewActive && (
+                        <span className="text-blue-600 flex items-center">
+                          <Signal className="w-4 h-4 mr-1" />
+                          Listening...
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-6 min-h-[300px] max-h-[400px] overflow-y-auto">
+                  {conversationHistory.length > 0 ? (
+                    <div className="space-y-4">
+                      {conversationHistory.map((entry, index) => (
+                        <div key={index} className={`flex ${entry.speaker === 'user' ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[80%] p-3 rounded-lg ${
+                            entry.speaker === 'user' 
+                              ? 'bg-blue-500 text-white' 
+                              : 'bg-white text-gray-800 border border-purple-200'
+                          }`}>
+                            <div className="flex items-center mb-1">
+                              {entry.speaker === 'user' ? (
+                                <Mic className="w-4 h-4 mr-2" />
+                              ) : (
+                                <Brain className="w-4 h-4 mr-2 text-purple-600" />
+                              )}
+                              <span className="text-xs font-medium">
+                                {entry.speaker === 'user' ? 'You' : `${aiAgentStatus?.provider?.toUpperCase() || 'AI'} Interviewer`}
+                              </span>
+                              <span className="text-xs opacity-70 ml-2">
+                                {new Date(entry.timestamp).toLocaleTimeString()}
+                              </span>
+                            </div>
+                            <p className="text-sm">{entry.message}</p>
+                            {entry.type && (
+                              <span className={`text-xs px-2 py-1 rounded-full mt-2 inline-block ${
+                                entry.type === 'greeting' ? 'bg-green-100 text-green-700' :
+                                entry.type === 'question' ? 'bg-blue-100 text-blue-700' :
+                                entry.type === 'speaking' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-gray-100 text-gray-700'
                               }`}>
-                                {message.type}
+                                {entry.type}
                               </span>
                             )}
                           </div>
-                          <p className="text-sm leading-relaxed">{message.message}</p>
-                          <div className="text-xs text-gray-500 mt-1">
-                            {new Date(message.timestamp).toLocaleTimeString()}
-                          </div>
                         </div>
-                      </div>
-                    ))
-                  )}
-                  
-                  {/* Live transcript preview */}
-                  {transcript && userSpeaking && (
-                    <div className="flex justify-end">
-                      <div className="max-w-xs lg:max-w-md px-4 py-3 rounded-lg bg-green-50 text-green-800 border-r-4 border-green-300 opacity-75">
-                        <div className="flex items-center mb-2">
-                          <User className="w-4 h-4 mr-2" />
-                          <span className="text-xs font-medium">You (speaking...)</span>
-                          <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse ml-2"></div>
-                        </div>
-                        <p className="text-sm leading-relaxed italic">{transcript}</p>
-                      </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-gray-500">
+                      <Phone className="w-8 h-8 mr-3" />
+                      <span>Click "Start Voice Interview" to begin the conversation</span>
                     </div>
                   )}
                 </div>
@@ -928,46 +910,23 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
               <div className="bg-white rounded-2xl shadow-lg p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                   <Mic className="w-5 h-5 mr-2 text-blue-600" />
-                  Voice Response
-                  {conversationalMode && (
-                    <span className={`ml-2 text-sm ${getProviderColor(agentProvider || selectedProvider).split(' ')[0]}`}>
-                      ({(agentProvider || selectedProvider) === 'openai' ? 'OpenAI' : 'Google AI'} Managed)
-                    </span>
-                  )}
+                  Voice Response ({aiAgentStatus?.provider?.toUpperCase() || 'AI'} Managed)
                 </h3>
                 
                 <div className="space-y-4">
                   {/* Live Transcript */}
                   <div className="bg-gray-50 rounded-xl p-4 min-h-[120px]">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-700">
-                        Live Transcript ({(agentProvider || selectedProvider) === 'openai' ? 'OpenAI Whisper' : 'Google Speech-to-Text'})
-                      </span>
-                      <div className="flex items-center space-x-2">
-                        {conversationalMode && (
-                          <div className={`flex items-center text-sm ${getProviderColor(agentProvider || selectedProvider).split(' ')[0]}`}>
-                            {getProviderIcon(agentProvider || selectedProvider)}
-                            <span className="ml-1">AI Managed</span>
-                          </div>
-                        )}
-                        {isAISpeaking && (
-                          <div className={`flex items-center text-sm ${getProviderColor(agentProvider || selectedProvider).split(' ')[0]}`}>
-                            <Bot className="w-4 h-4 mr-1" />
-                            AI Speaking
-                          </div>
-                        )}
-                        {!isAISpeaking && !conversationalMode && isInterviewActive && (
-                          <div className="flex items-center text-sm text-gray-500">
-                            <Mic className="w-4 h-4 mr-1" />
-                            Ready
-                          </div>
-                        )}
-                      </div>
+                      <span className="text-sm font-medium text-gray-700">Live Transcript ({aiAgentStatus?.provider?.toUpperCase() || 'Browser'} Speech-to-Text)</span>
+                      {isListening && (
+                        <div className="flex items-center text-sm text-green-600">
+                          <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse mr-2"></div>
+                          AI Managed
+                        </div>
+                      )}
                     </div>
                     <p className="text-gray-800">
-                      {transcript || (conversationalMode 
-                        ? `${(agentProvider || selectedProvider) === 'openai' ? 'OpenAI' : 'Google AI'} is managing the conversation flow. Your speech will be processed automatically...` 
-                        : `Your speech will appear here in real-time using ${(agentProvider || selectedProvider) === 'openai' ? 'OpenAI Whisper' : 'Google Speech-to-Text'}...`)}
+                      {transcript || 'Your speech will appear here in real-time...'}
                     </p>
                   </div>
 
@@ -977,11 +936,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                       <Volume2 className="w-5 h-5 text-gray-600" />
                       <div className="flex-1 bg-gray-200 rounded-full h-2">
                         <div
-                          className={`h-2 rounded-full transition-all duration-100 ${
-                            (agentProvider || selectedProvider) === 'openai' 
-                              ? 'bg-gradient-to-r from-green-400 to-green-600' 
-                              : 'bg-gradient-to-r from-purple-400 to-purple-600'
-                          }`}
+                          className="bg-gradient-to-r from-green-400 to-blue-500 h-2 rounded-full transition-all duration-100"
                           style={{ width: `${audioLevel}%` }}
                         />
                       </div>
@@ -992,111 +947,105 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                   {/* Voice Controls */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
+                      {speechSupported && (
+                        <button
+                          onClick={toggleMicrophone}
+                          disabled={!isInterviewActive || connectionStatus !== 'connected'}
+                          className={`p-4 rounded-xl transition-all ${
+                            isListening
+                              ? 'bg-green-100 text-green-600'
+                              : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                          {isListening ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
+                        </button>
+                      )}
+                      
                       <div className="text-sm text-gray-600">
-                        {conversationalMode 
-                          ? `${(agentProvider || selectedProvider) === 'openai' ? 'OpenAI' : 'Google AI'} is managing the conversation flow automatically`
-                          : 'Manual voice control mode'
+                        {aiAgentStatus?.conversational 
+                          ? `${aiAgentStatus.provider?.toUpperCase() || 'AI'} is managing the conversation flow automatically`
+                          : isListening ? 'Click to stop recording' : 'Click to start recording'
                         }
                       </div>
                     </div>
 
-                    {conversationalMode && (
-                      <div className={`text-sm font-medium ${getProviderColor(agentProvider || selectedProvider).split(' ')[0]}`}>
-                        Powered by {(agentProvider || selectedProvider) === 'openai' ? 'OpenAI' : 'Google Cloud AI'}
-                      </div>
-                    )}
+                    <div className="text-sm text-purple-600">
+                      Powered by {aiAgentStatus?.provider?.toUpperCase() || 'AI'} Agent
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Notes & Status Section */}
-            <div className="space-y-6">
-              {/* Interview Notes */}
-              <div className="bg-white rounded-2xl shadow-lg p-6">
-                <div className="flex items-center mb-4">
-                  <FileText className="w-5 h-5 text-gray-600 mr-2" />
-                  <h3 className="text-lg font-semibold text-gray-900">Interview Notes</h3>
-                </div>
-                
-                <textarea
-                  ref={notesRef}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder={`Jot down key points, thoughts, or reminders during the ${(agentProvider || selectedProvider) === 'openai' ? 'OpenAI' : 'Google AI'} voice interview...`}
-                  className="w-full h-48 px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors"
-                />
-                
-                <div className="mt-4 text-xs text-gray-500">
-                  Your notes will be saved and available in the analytics section.
-                </div>
+            {/* Notes Section */}
+            <div className="bg-white rounded-2xl shadow-lg p-6">
+              <div className="flex items-center mb-4">
+                <FileText className="w-5 h-5 text-gray-600 mr-2" />
+                <h3 className="text-lg font-semibold text-gray-900">Interview Notes</h3>
+              </div>
+              
+              <textarea
+                ref={notesRef}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Jot down key points, thoughts, or reminders during the Google AI voice interview..."
+                className="w-full h-64 px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors"
+              />
+              
+              <div className="mt-4 text-xs text-gray-500">
+                Your notes will be saved and available in the analytics section.
               </div>
 
-              {/* Connection & Status Info */}
-              <div className="bg-white rounded-2xl shadow-lg p-6">
-                <h4 className="font-medium text-gray-900 mb-4">
-                  {(agentProvider || selectedProvider) === 'openai' ? 'OpenAI' : 'Google AI'} Status
-                </h4>
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-700">LiveKit:</span>
-                    <span className={`flex items-center ${connectionStatus === 'connected' ? 'text-green-600' : 'text-red-600'}`}>
-                      {connectionStatus === 'connected' ? <CheckCircle className="w-4 h-4 mr-1" /> : <XCircle className="w-4 h-4 mr-1" />}
+              {/* Google AI Status */}
+              <div className="mt-6 p-4 bg-purple-50 rounded-xl">
+                <h4 className="font-medium text-purple-900 mb-2">Google AI Status</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-purple-700">LiveKit:</span>
+                    <span className={connectionStatus === 'connected' ? 'text-green-600' : 'text-red-600'}>
                       {getConnectionStatusText()}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-700">Audio Track:</span>
-                    <span className={`flex items-center ${localAudioTrack ? 'text-green-600' : 'text-gray-600'}`}>
-                      {localAudioTrack ? <CheckCircle className="w-4 h-4 mr-1" /> : <XCircle className="w-4 h-4 mr-1" />}
+                  <div className="flex justify-between">
+                    <span className="text-purple-700">Audio Track:</span>
+                    <span className={localAudioTrack ? 'text-green-600' : 'text-gray-600'}>
                       {localAudioTrack ? 'Active' : 'Inactive'}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-700">Remote Audio:</span>
-                    <span className={`flex items-center ${remoteAudioTracks.length > 0 ? 'text-green-600' : 'text-gray-600'}`}>
-                      {remoteAudioTracks.length > 0 ? <CheckCircle className="w-4 h-4 mr-1" /> : <XCircle className="w-4 h-4 mr-1" />}
+                  <div className="flex justify-between">
+                    <span className="text-purple-700">Remote Audio:</span>
+                    <span className={remoteAudioTracks.length > 0 ? 'text-green-600' : 'text-gray-600'}>
                       {remoteAudioTracks.length} tracks
                     </span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-700">AI Agent:</span>
-                    <span className={`flex items-center ${aiAgentEnabled ? getProviderColor(agentProvider || selectedProvider).split(' ')[0] : 'text-gray-600'}`}>
-                      {aiAgentEnabled ? getProviderIcon(agentProvider || selectedProvider) : <XCircle className="w-4 h-4 mr-1" />}
-                      <span className="ml-1">{aiAgentEnabled ? 'Active' : 'Disabled'}</span>
+                  <div className="flex justify-between">
+                    <span className="text-purple-700">AI Agent:</span>
+                    <span className={aiAgentStatus?.enabled ? 'text-green-600' : 'text-red-600'}>
+                      {aiAgentStatus?.enabled ? 'Active' : 'Inactive'}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-700">Mode:</span>
-                    <span className={`flex items-center ${conversationalMode ? 'text-green-600' : 'text-blue-600'}`}>
-                      {conversationalMode ? <Zap className="w-4 h-4 mr-1" /> : <Mic className="w-4 h-4 mr-1" />}
-                      {conversationalMode ? 'Conversational' : 'Manual'}
+                  <div className="flex justify-between">
+                    <span className="text-purple-700">Mode:</span>
+                    <span className="text-green-600">
+                      {aiAgentStatus?.conversational ? 'Conversational' : 'Standard'}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-700">Provider:</span>
-                    <span className={`font-medium ${getProviderColor(agentProvider || selectedProvider).split(' ')[0]}`}>
-                      {(agentProvider || selectedProvider) === 'openai' ? 'OpenAI' : 'Google Cloud AI'}
+                  <div className="flex justify-between">
+                    <span className="text-purple-700">Provider:</span>
+                    <span className="text-purple-600">
+                      {aiAgentStatus?.provider?.toUpperCase() || 'Not Set'}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-700">Participants:</span>
-                    <span className="text-gray-900 font-medium">
-                      {participantCount}
-                    </span>
-                  </div>
-                </div>
-                
-                {voiceSession && (
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <div className="text-xs text-gray-600 space-y-1">
-                      <div><strong>Session:</strong> {voiceSession.sessionId}</div>
-                      <div><strong>Room:</strong> {voiceSession.roomName}</div>
-                      <div><strong>Token Length:</strong> {voiceSession.participantToken?.length || 0}</div>
-                      <div><strong>AI Provider:</strong> {(agentProvider || selectedProvider) === 'openai' ? 'OpenAI' : 'Google Cloud'}</div>
+                  {voiceSession && (
+                    <div className="mt-3 pt-2 border-t border-purple-200">
+                      <div className="text-xs text-purple-600">
+                        <div><strong>Session:</strong> {voiceSession.sessionId}</div>
+                        <div><strong>Room:</strong> {voiceSession.roomName}</div>
+                        <div><strong>Token Length:</strong> {voiceSession.participantToken?.length || 0}</div>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           </div>
