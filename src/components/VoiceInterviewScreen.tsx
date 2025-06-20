@@ -22,7 +22,9 @@ import {
   StopCircle,
   Settings,
   Brain,
-  Zap
+  Zap,
+  CheckCircle,
+  XCircle
 } from 'lucide-react';
 import { InterviewConfig } from '../types';
 import { AIInterviewSimulator } from '../utils/aiSimulator';
@@ -54,11 +56,14 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   const [livekitReady, setLivekitReady] = useState(false);
   const [showEndConfirmation, setShowEndConfirmation] = useState(false);
   const [conversationHistory, setConversationHistory] = useState<any[]>([]);
+  const [currentQuestion, setCurrentQuestion] = useState<string>('');
   const [isAISpeaking, setIsAISpeaking] = useState(false);
   const [userSpeaking, setUserSpeaking] = useState(false);
   const [aiAgentStatus, setAiAgentStatus] = useState<any>(null);
   const [selectedProvider, setSelectedProvider] = useState<'openai' | 'google'>('google');
   const [showProviderSelection, setShowProviderSelection] = useState(false);
+  const [showAutoplayPrompt, setShowAutoplayPrompt] = useState(false);
+  const [audioTestResult, setAudioTestResult] = useState<'none' | 'success' | 'failed'>('none');
   
   // Audio management refs
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -73,6 +78,36 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     resetTranscript,
     isSupported: speechSupported
   } = useSpeechRecognition();
+
+  // Handle data messages from AI agent
+  const handleDataMessage = useCallback((data: any) => {
+    console.log('[VoiceInterview] 📨 Received data message:', data);
+    
+    if (data.type === 'question' && data.text) {
+      setCurrentQuestion(data.text);
+      setConversationHistory(prev => [...prev, {
+        speaker: 'ai',
+        message: data.text,
+        timestamp: Date.now(),
+        type: 'question'
+      }]);
+    } else if (data.type === 'greeting' && data.text) {
+      setCurrentQuestion(data.text);
+      setConversationHistory(prev => [...prev, {
+        speaker: 'ai',
+        message: data.text,
+        timestamp: Date.now(),
+        type: 'greeting'
+      }]);
+    } else if (data.type === 'feedback' && data.text) {
+      setConversationHistory(prev => [...prev, {
+        speaker: 'ai',
+        message: data.text,
+        timestamp: Date.now(),
+        type: 'feedback'
+      }]);
+    }
+  }, []);
 
   // Create LiveKit props using the backend-provided URL when we have a session
   const livekitProps = voiceSession && voiceSession.participantToken ? {
@@ -89,7 +124,8 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     onError: (error: Error) => {
       setConnectionStatus('error');
       console.error('[VoiceInterview] ❌ LiveKit error:', error);
-    }
+    },
+    onDataMessageReceived: handleDataMessage
   } : null;
 
   // Only initialize LiveKit hook when we have valid props
@@ -110,7 +146,8 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     token: '',
     onConnected: () => {},
     onDisconnected: () => {},
-    onError: () => {}
+    onError: () => {},
+    onDataMessageReceived: () => {}
   });
 
   const notesRef = useRef<HTMLTextAreaElement>(null);
@@ -164,7 +201,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     return () => clearInterval(interval);
   }, [isInterviewActive, startTime]);
 
-  // Enhanced remote audio track handling with proper audio playback
+  // Enhanced remote audio track handling with proper audio playback and autoplay detection
   useEffect(() => {
     if (remoteAudioTracks.length > 0) {
       console.log(`🎵 Processing ${remoteAudioTracks.length} remote audio tracks`);
@@ -187,6 +224,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
             console.log(`🎵 Audio started playing for track: ${trackId}`);
             setIsAISpeaking(true);
             setUserSpeaking(false);
+            setShowAutoplayPrompt(false);
             // Stop user listening when AI starts speaking
             if (isListening) {
               stopListening();
@@ -238,10 +276,17 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
             // Force play if needed (handle autoplay restrictions)
             const playPromise = audioElement.play();
             if (playPromise) {
-              playPromise.catch(error => {
-                console.warn(`⚠️ Autoplay prevented for track ${trackId}:`, error);
-                // User interaction required for autoplay
-              });
+              playPromise
+                .then(() => {
+                  console.log(`✅ Audio autoplay successful for track: ${trackId}`);
+                  setShowAutoplayPrompt(false);
+                })
+                .catch(error => {
+                  console.warn(`⚠️ Autoplay prevented for track ${trackId}:`, error);
+                  if (error.name === 'NotAllowedError') {
+                    setShowAutoplayPrompt(true);
+                  }
+                });
             }
             
           } catch (attachError) {
@@ -357,6 +402,16 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     }
   }, [transcript, conversationHistory]);
 
+  // Enable audio function for autoplay prompt
+  const enableAudio = () => {
+    audioElementsRef.current.forEach(audioElement => {
+      audioElement.play().catch(error => {
+        console.error('Failed to enable audio:', error);
+      });
+    });
+    setShowAutoplayPrompt(false);
+  };
+
   // Fallback Text-to-Speech function
   const speakTextFallback = (text: string) => {
     if (speechSynthesisRef.current) {
@@ -384,6 +439,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       utterance.onstart = () => {
         console.log('🗣️ Fallback TTS started');
         setIsAISpeaking(true);
+        setAudioTestResult('success');
         if (isListening) {
           stopListening();
         }
@@ -402,6 +458,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       utterance.onerror = (error) => {
         console.error('❌ Fallback TTS error:', error);
         setIsAISpeaking(false);
+        setAudioTestResult('failed');
       };
       
       speechSynthesisRef.current.speak(utterance);
@@ -446,23 +503,9 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         conversational: session.conversationalMode
       });
       
-      // Add initial conversation entries
-      if (session.aiAgentEnabled) {
-        setConversationHistory([
-          {
-            speaker: 'ai',
-            message: `Hello! I'm your ${session.agentProvider?.toUpperCase() || 'AI'} interviewer. I'll be conducting your interview today using advanced speech recognition and natural language processing.`,
-            timestamp: Date.now(),
-            type: 'greeting'
-          },
-          {
-            speaker: 'ai',
-            message: "Perfect! I'm now ready to begin. The interview will flow naturally using Google AI's advanced speech technology. Are you ready to start?",
-            timestamp: Date.now() + 1000,
-            type: 'question'
-          }
-        ]);
-      }
+      // Clear conversation history - it will be populated by data messages
+      setConversationHistory([]);
+      setCurrentQuestion('');
       
     } catch (error) {
       console.error('[VoiceInterview] ❌ Error starting voice interview:', error);
@@ -568,6 +611,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
 
   const testAudio = () => {
     const testMessage = "This is a test of the audio system. If you can hear this, the audio is working correctly.";
+    setAudioTestResult('none');
     speakTextFallback(testMessage);
   };
 
@@ -595,6 +639,30 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
       <div className="container mx-auto px-4 py-6">
         <div className="max-w-6xl mx-auto">
+          {/* Autoplay Prompt Modal */}
+          {showAutoplayPrompt && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-2xl p-8 max-w-md mx-4">
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Volume2 className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Enable Audio</h3>
+                  <p className="text-gray-600 mb-6">
+                    Your browser requires user interaction to play audio. Click the button below to enable audio for the AI interviewer.
+                  </p>
+                  <button
+                    onClick={enableAudio}
+                    className="w-full px-6 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all"
+                  >
+                    <Volume2 className="w-4 h-4 mr-2 inline" />
+                    Enable Audio
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* End Interview Confirmation Modal */}
           {showEndConfirmation && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -795,6 +863,8 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                     >
                       <Volume2 className="w-4 h-4 mr-2" />
                       Test Audio
+                      {audioTestResult === 'success' && <CheckCircle className="w-4 h-4 ml-2 text-green-300" />}
+                      {audioTestResult === 'failed' && <XCircle className="w-4 h-4 ml-2 text-red-300" />}
                     </button>
                   </>
                 ) : (
@@ -860,6 +930,16 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                 </div>
 
                 <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-6 min-h-[300px] max-h-[400px] overflow-y-auto">
+                  {currentQuestion && (
+                    <div className="mb-6 p-4 bg-white rounded-lg border border-purple-200">
+                      <div className="flex items-center mb-2">
+                        <Brain className="w-5 h-5 text-purple-600 mr-2" />
+                        <span className="font-semibold text-purple-900">Current Question</span>
+                      </div>
+                      <p className="text-gray-800">{currentQuestion}</p>
+                    </div>
+                  )}
+
                   {conversationHistory.length > 0 ? (
                     <div className="space-y-4">
                       {conversationHistory.map((entry, index) => (
@@ -988,7 +1068,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                 ref={notesRef}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Jot down key points, thoughts, or reminders during the Google AI voice interview..."
+                placeholder="Jot down key points, thoughts, or reminders during the voice interview..."
                 className="w-full h-64 px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors"
               />
               
@@ -996,9 +1076,9 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                 Your notes will be saved and available in the analytics section.
               </div>
 
-              {/* Google AI Status */}
+              {/* AI Status */}
               <div className="mt-6 p-4 bg-purple-50 rounded-xl">
-                <h4 className="font-medium text-purple-900 mb-2">Google AI Status</h4>
+                <h4 className="font-medium text-purple-900 mb-2">{aiAgentStatus?.provider?.toUpperCase() || 'AI'} Status</h4>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-purple-700">LiveKit:</span>

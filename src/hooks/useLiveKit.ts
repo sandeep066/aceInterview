@@ -19,6 +19,7 @@ interface UseLiveKitProps {
   onDisconnected?: () => void;
   onError?: (error: Error) => void;
   onAudioReceived?: (audioData: ArrayBuffer) => void;
+  onDataMessageReceived?: (data: any) => void;
 }
 
 interface UseLiveKitReturn {
@@ -41,7 +42,8 @@ export const useLiveKit = ({
   onConnected,
   onDisconnected,
   onError,
-  onAudioReceived
+  onAudioReceived,
+  onDataMessageReceived
 }: UseLiveKitProps): UseLiveKitReturn => {
   const [room, setRoom] = useState<Room | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -157,8 +159,19 @@ export const useLiveKit = ({
 
       newRoom.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
         if (track.kind === Track.Kind.Audio) {
-          console.log('[LiveKit] 🎵 Audio track subscribed');
-          setRemoteAudioTracks(prev => [...prev, track as RemoteAudioTrack]);
+          console.log('[LiveKit] 🎵 Audio track subscribed from participant:', track.source);
+          console.log('[LiveKit] 🎵 Track details:', {
+            sid: track.sid,
+            source: track.source,
+            enabled: track.isEnabled,
+            muted: track.isMuted
+          });
+          
+          setRemoteAudioTracks(prev => {
+            const newTracks = [...prev, track as RemoteAudioTrack];
+            console.log('[LiveKit] 🎵 Total remote audio tracks:', newTracks.length);
+            return newTracks;
+          });
           
           // Handle audio data if callback provided
           if (onAudioReceived && track instanceof RemoteAudioTrack) {
@@ -170,10 +183,12 @@ export const useLiveKit = ({
 
       newRoom.on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
         if (track.kind === Track.Kind.Audio) {
-          console.log('[LiveKit] 🎵 Audio track unsubscribed');
-          setRemoteAudioTracks(prev => 
-            prev.filter(t => t.sid !== track.sid)
-          );
+          console.log('[LiveKit] 🎵 Audio track unsubscribed:', track.sid);
+          setRemoteAudioTracks(prev => {
+            const filtered = prev.filter(t => t.sid !== track.sid);
+            console.log('[LiveKit] 🎵 Remaining remote audio tracks:', filtered.length);
+            return filtered;
+          });
         }
       });
 
@@ -182,11 +197,18 @@ export const useLiveKit = ({
           const data = JSON.parse(new TextDecoder().decode(payload));
           console.log('[LiveKit] 📨 Data received from', participant?.identity, data);
           
+          // Pass data message to component
+          if (onDataMessageReceived) {
+            onDataMessageReceived(data);
+          }
+          
           // Handle different types of data messages
           if (data.type === 'question') {
-            // Handle new question from AI interviewer
+            console.log('[LiveKit] 📨 Received question:', data.text);
           } else if (data.type === 'feedback') {
-            // Handle real-time feedback
+            console.log('[LiveKit] 📨 Received feedback:', data.text);
+          } else if (data.type === 'greeting') {
+            console.log('[LiveKit] 📨 Received greeting:', data.text);
           }
         } catch (error) {
           console.error('[LiveKit] ❌ Error parsing data message:', error);
@@ -228,7 +250,7 @@ export const useLiveKit = ({
     }
 
     console.log('[LiveKit] ========== CONNECTION ATTEMPT END ==========');
-  }, [wsUrl, token, isConnecting, isConnected, onConnected, onDisconnected, onError, onAudioReceived]);
+  }, [wsUrl, token, isConnecting, isConnected, onConnected, onDisconnected, onError, onAudioReceived, onDataMessageReceived]);
 
   const disconnectFromRoom = useCallback(() => {
     if (roomRef.current) {
@@ -254,7 +276,10 @@ export const useLiveKit = ({
         channelCount: 1,
       };
 
+      console.log('[LiveKit] 🎤 Creating local audio track with options:', audioOptions);
       const track = await createLocalAudioTrack(audioOptions);
+      
+      console.log('[LiveKit] 🎤 Publishing local audio track to room');
       await room.localParticipant.publishTrack(track);
       
       setLocalAudioTrack(track);
@@ -267,6 +292,7 @@ export const useLiveKit = ({
 
   const stopAudio = useCallback(() => {
     if (localAudioTrack) {
+      console.log('[LiveKit] 🎤 Stopping local audio track');
       localAudioTrack.stop();
       room?.localParticipant.unpublishTrack(localAudioTrack);
       setLocalAudioTrack(null);
