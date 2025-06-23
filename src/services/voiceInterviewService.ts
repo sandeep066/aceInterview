@@ -182,7 +182,9 @@ export class VoiceInterviewService {
    */
   static async checkLiveKitConfig(): Promise<{ configured: boolean; wsUrl?: string; aiAgent?: any }> {
     try {
-      const response = await APIService.get('/livekit/config');
+      console.log('LiveKit config Origin URL:', import.meta.env.VITE_API_URL);
+      const response = await APIService.get(`${import.meta.env.VITE_API_URL}/livekit/config`);
+
       return response.data;
     } catch (error) {
       console.error('Error checking LiveKit config:', error);
