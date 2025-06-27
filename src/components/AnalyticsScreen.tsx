@@ -42,18 +42,21 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
         console.log('🔄 Starting analytics generation...');
         
         const startTime = Date.now();
-        const analyticsData = await simulator.generateAnalytics();
+
+        // Fix: Do not access simulator.config (it's private). Just call generateAnalytics with no arguments.
+        let analyticsData: any;
+        analyticsData = await simulator.generateAnalytics();
         const duration = Date.now() - startTime;
         
         console.log(`✅ Analytics generated in ${duration}ms`);
-        console.log('Analytics metadata:', analyticsData.metadata);
+        console.log('Analytics metadata:', analyticsData?.metadata);
         
         setAnalytics(analyticsData);
         
         // Determine analysis method from metadata
-        if (analyticsData.metadata?.analysisMethod === 'agentic') {
+        if (analyticsData?.metadata?.analysisMethod === 'agentic') {
           setAnalysisMethod('agentic');
-        } else if (analyticsData.metadata?.analysisMethod === 'fallback') {
+        } else if (analyticsData?.metadata?.analysisMethod === 'fallback') {
           setAnalysisMethod('traditional');
         } else {
           setAnalysisMethod('traditional');
@@ -347,11 +350,11 @@ export const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({
                       <div className="w-32 bg-gray-200 rounded-full h-2">
                         <div
                           className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500"
-                          style={{ width: `${score}%` }}
+                          style={{ width: `${Number(score)}%` }}
                         />
                       </div>
-                      <span className={`px-2 py-1 rounded-lg text-sm font-semibold ${getScoreColor(score as number)}`}>
-                        {score}%
+                      <span className={`px-2 py-1 rounded-lg text-sm font-semibold ${getScoreColor(Number(score))}`}>
+                        {Number(score)}%
                       </span>
                     </div>
                   </div>

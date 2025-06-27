@@ -51,7 +51,8 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
   const checkLivekitAvailability = async () => {
     try {
       const config = await VoiceInterviewService.checkLiveKitConfig();
-      setLivekitAvailable(config.configured);
+      // Fix: Defensive check for undefined/null config
+      setLivekitAvailable(!!(config && config.configured));
     } catch (error) {
       console.error('Error checking LiveKit config:', error);
       setLivekitAvailable(false);

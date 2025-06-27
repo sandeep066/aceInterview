@@ -7,7 +7,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
+#node_modules
 dist
 dist-ssr
 *.local
@@ -23,3 +23,14 @@ dist-ssr
 *.sln
 *.sw?
 .env
+voicevercify-e2f11885e2ff.json
+
+#virtual environment
+venv
+.env        
+node_modules
+Lib
+Scripts
+# Python cache files
+__pycache__/    
+    

@@ -8,7 +8,11 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "server": "node server/index.js"
+    "server": "node server/index.js",
+    "agent": "node server/aiAgent.js",
+    "python-server": "cd python_backend && python main.py",
+    "setup-python": "cd python_backend && pip install -r ../requirements.txt",
+    "install-python": "pip install -r requirements.txt"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",
@@ -42,6 +46,10 @@
     "@langchain/core": "^0.2.0",
     "@langchain/openai": "^0.2.0",
     "@langchain/anthropic": "^0.2.0",
-    "@google/generative-ai": "^0.15.0"
+    "@google/generative-ai": "^0.15.0",
+    "@livekit/agents": "^0.4.0",
+    "@google-cloud/speech": "^6.7.0",
+    "@google-cloud/text-to-speech": "^5.4.0",
+    "ws": "^8.18.0"
   }
 }

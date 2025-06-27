@@ -54,6 +54,15 @@ export interface AnalyticsData {
     score: number;
     feedback: string;
   }[];
+  metadata: {
+    generatedAt: string;
+    analysisMethod: string;
+    totalResponses: number;
+    wasEndedEarly: boolean;
+    completionRate: number;
+    maxQuestionsCalculated: number;
+    [key: string]: any;
+  };
 }
 
 export type AppScreen = 'config' | 'interview' | 'analytics';

@@ -2,7 +2,7 @@
 
 A comprehensive AI-powered interview practice application that uses Large Language Models (LLMs) and LiveKit for real-time voice interviews, generating dynamic, contextual interview questions and providing intelligent feedback.
 
-## Features
+## 🚀 Features
 
 ### 🎙️ **LiveKit Voice Interviews**
 - **Real-time voice communication** using LiveKit WebRTC infrastructure
@@ -16,7 +16,7 @@ A comprehensive AI-powered interview practice application that uses Large Langua
 - Dynamic question generation based on your specific topic, experience level, and interview style
 - Contextual follow-up questions that adapt to your responses
 - Company-specific scenarios when target company is provided
-- Support for multiple LLM providers (OpenAI GPT-4, Anthropic Claude)
+- Support for multiple LLM providers (OpenAI GPT-4, Anthropic Claude, Google Gemini)
 
 ### 🎯 **Interview Types**
 - **Technical Interviews**: Code problems, system design, technical concepts
@@ -40,22 +40,54 @@ A comprehensive AI-powered interview practice application that uses Large Langua
 - Note-taking functionality during voice interviews
 - Responsive design for all devices
 
-## Setup Instructions
+## 🛠️ Tech Stack
 
-### Prerequisites
-- Node.js 18+ and npm
-- An API key from either OpenAI or Anthropic
-- LiveKit Cloud account or self-hosted LiveKit server
-- Microphone access for voice interviews
+### Frontend
+- **React 18** with TypeScript
+- **Tailwind CSS** for styling
+- **Vite** for build tooling
+- **LiveKit Client SDK** for real-time communication
+- **Lucide React** for icons
 
-### 1. Clone and Install Dependencies
+### Backend
+- **Node.js** with Express
+- **LiveKit Server SDK** for room management
+- **Multiple LLM Providers**: OpenAI, Anthropic, Google Gemini
+- **Agentic AI Framework** for intelligent question generation
+- **WebSocket** support for real-time communication
+
+### AI Agents (Python)
+- **LiveKit Agents Framework** (Python)
+- **OpenAI** and **Google Cloud** integration
+- **Speech-to-Text** and **Text-to-Speech**
+- **Real-time conversation management**
+
+## 📋 Prerequisites
+
+- **Node.js 18+** and npm
+- **Python 3.8+** for AI agents
+- **API keys** from either OpenAI, Anthropic, or Google
+- **LiveKit Cloud account** or self-hosted LiveKit server
+- **Microphone access** for voice interviews
+
+## 🚀 Quick Start
+
+### 1. Clone the Repository
 ```bash
 git clone <repository-url>
 cd ai-interview-platform
-npm install
 ```
 
-### 2. Environment Configuration
+### 2. Install Dependencies
+```bash
+# Install Node.js dependencies
+npm install
+
+# Setup Python environment and dependencies
+npm run setup-python
+```
+
+### 3. Environment Configuration
 ```bash
 cp .env.example .env
 ```
@@ -63,10 +95,14 @@ cp .env.example .env
 Edit `.env` file with your configuration:
 ```env
 # Choose your LLM provider
-LLM_PROVIDER=openai
-OPENAI_API_KEY=your_openai_api_key_here
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=your_gemini_api_key_here
 
-# OR use Anthropic Claude
+# OR use OpenAI
+# LLM_PROVIDER=openai
+# OPENAI_API_KEY=your_openai_api_key_here
+
+# OR use Anthropic
 # LLM_PROVIDER=anthropic
 # ANTHROPIC_API_KEY=your_anthropic_api_key_here
 
@@ -75,12 +111,46 @@ LIVEKIT_API_KEY=your_livekit_api_key
 LIVEKIT_API_SECRET=your_livekit_api_secret
 LIVEKIT_WS_URL=wss://your-livekit-server.com
 
+# Google Cloud (for advanced voice features)
+GOOGLE_APPLICATION_CREDENTIALS=path/to/your/service-account-key.json
+GOOGLE_CLOUD_PROJECT_ID=your_google_cloud_project_id
+
 # Server Configuration
 PORT=3001
 VITE_API_URL=http://localhost:3001/api
 ```
 
-### 3. LiveKit Setup
+### 4. Start the Application
+
+**Full Mode (with voice interviews):**
+```bash
+# Terminal 1: Start the backend server
+npm run server
+
+# Terminal 2: Start the Python AI agents
+npm run agent
+
+# Terminal 3: Start the frontend
+npm run dev
+```
+
+**Text-only Mode:**
+```bash
+# Terminal 1: Start the backend server
+npm run server
+
+# Terminal 2: Start the frontend
+npm run dev
+```
+
+### 5. Access the Application
+- **Frontend**: http://localhost:5173
+- **Backend API**: http://localhost:3001
+- **Health Check**: http://localhost:3001/api/health
+
+## 🔧 Configuration
+
+### LiveKit Setup
 
 #### Option A: LiveKit Cloud (Recommended)
 1. Sign up at [LiveKit Cloud](https://cloud.livekit.io/)
@@ -93,56 +163,21 @@ VITE_API_URL=http://localhost:3001/api
 2. Configure your server URL in the `.env` file
 3. Set up your API credentials
 
-### 4. Start the Application
+### LLM Provider Setup
 
-**Full Mode (with LLM backend and LiveKit):**
-```bash
-# Terminal 1: Start the backend server with LiveKit support
-npm run server
+#### Google Gemini (Recommended)
+1. Get API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. Set `LLM_PROVIDER=gemini` and `GEMINI_API_KEY` in `.env`
 
-# Terminal 2: Start the frontend development server
-npm run dev
-```
+#### OpenAI
+1. Get API key from [OpenAI Platform](https://platform.openai.com/api-keys)
+2. Set `LLM_PROVIDER=openai` and `OPENAI_API_KEY` in `.env`
 
-**Text-only Mode (without LiveKit):**
-```bash
-# Set LIVEKIT_API_KEY="" in .env to disable voice features
-npm run server  # Terminal 1
-npm run dev     # Terminal 2
-```
+#### Anthropic Claude
+1. Get API key from [Anthropic Console](https://console.anthropic.com/)
+2. Set `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY` in `.env`
 
-### 5. Access the Application
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:3001
-- Health Check: http://localhost:3001/api/health
-- LiveKit Config Check: http://localhost:3001/api/livekit/config
-
-## Architecture
-
-### Frontend (React + TypeScript + LiveKit)
-- **Configuration Screen**: Interview setup and voice/text mode selection
-- **Voice Interview Screen**: Real-time voice communication with AI interviewer
-- **Text Interview Screen**: Traditional text-based interview (fallback)
-- **Analytics Screen**: Performance analysis with voice session insights
-- **LiveKit Integration**: Real-time audio streaming and communication
-- **Speech Recognition**: Browser-based speech-to-text with LiveKit audio
-
-### Backend (Node.js + Express + LiveKit Server SDK)
-- **LLM Service**: Unified interface for multiple LLM providers
-- **LiveKit Service**: Room management, token generation, webhook handling
-- **Voice Interview Service**: Session management, audio processing, real-time question flow
-- **Question Generation**: Context-aware question creation with voice timing
-- **Response Analysis**: AI-powered feedback with audio quality metrics
-- **Analytics Engine**: Comprehensive performance evaluation including voice metrics
-
-### LiveKit Integration
-- **Real-time Communication**: WebRTC-based audio streaming
-- **Room Management**: Dynamic interview room creation and management
-- **Token-based Authentication**: Secure participant access control
-- **Webhook Integration**: Real-time event handling and session monitoring
-- **Audio Quality Optimization**: Echo cancellation, noise suppression, auto-gain control
-
-## API Endpoints
+## 📚 API Documentation
 
 ### Text-based Interview Endpoints
 ```
@@ -171,55 +206,32 @@ POST /api/livekit/webhook           # Handle LiveKit webhooks
 GET  /api/voice-interview/sessions/active  # Get active sessions (admin)
 ```
 
-## Voice Interview Features
+## 🏗️ Architecture
 
-### Real-time Communication
-- **Low-latency audio**: Sub-100ms audio transmission
-- **Adaptive bitrate**: Automatic quality adjustment based on connection
-- **Echo cancellation**: Advanced audio processing for clear communication
-- **Noise suppression**: Background noise filtering
-- **Connection recovery**: Automatic reconnection on network issues
+### Frontend (React + TypeScript + LiveKit)
+- **Configuration Screen**: Interview setup and voice/text mode selection
+- **Voice Interview Screen**: Real-time voice communication with AI interviewer
+- **Text Interview Screen**: Traditional text-based interview (fallback)
+- **Analytics Screen**: Performance analysis with voice session insights
+- **LiveKit Integration**: Real-time audio streaming and communication
+- **Speech Recognition**: Browser-based speech-to-text with LiveKit audio
 
-### AI Voice Interviewer
-- **Natural conversation flow**: AI responds with appropriate timing
-- **Voice synthesis**: Text-to-speech for AI questions (future enhancement)
-- **Contextual responses**: AI adapts based on voice tone and pace
-- **Real-time transcription**: Speech-to-text for immediate analysis
+### Backend (Node.js + Express + LiveKit Server SDK)
+- **LLM Service**: Unified interface for multiple LLM providers
+- **LiveKit Service**: Room management, token generation, webhook handling
+- **Voice Interview Service**: Session management, audio processing, real-time question flow
+- **Question Generation**: Context-aware question creation with voice timing
+- **Response Analysis**: AI-powered feedback with audio quality metrics
+- **Analytics Engine**: Comprehensive performance evaluation including voice metrics
 
-### Session Management
-- **Persistent sessions**: Resume interrupted interviews
-- **Session recording**: Audio recording for later review (optional)
-- **Multi-device support**: Switch devices during interview
-- **Session analytics**: Detailed voice interaction metrics
+### AI Agents (Python + LiveKit Agents)
+- **Multi-Provider Support**: OpenAI and Google Cloud integration
+- **Real-time Conversation**: Natural voice interaction with AI interviewer
+- **Speech Processing**: Advanced STT and TTS capabilities
+- **Session Management**: Persistent interview sessions with recovery
+- **Audio Quality**: Echo cancellation, noise suppression, auto-gain control
 
-## Configuration Options
-
-### Interview Modes
-- **Voice Interview**: Full LiveKit-powered voice communication
-- **Text Interview**: Traditional text-based interview (fallback)
-- **Hybrid Mode**: Voice input with text backup
-
-### Voice Settings
-- **Audio Quality**: Configurable bitrate and sample rate
-- **Noise Suppression**: Adjustable noise filtering
-- **Echo Cancellation**: Configurable echo removal
-- **Auto Gain Control**: Automatic volume adjustment
-
-### Interview Styles
-- Technical Interview
-- HR Interview  
-- Behavioral Interview
-- Salary Negotiation
-- Case Study Interview
-
-### Experience Levels
-- Fresher (0-1 years)
-- Junior (1-3 years)
-- Mid-Level (3-6 years)
-- Senior (6+ years)
-- Lead/Manager (8+ years)
-
-## Deployment
+## 🚀 Deployment
 
 ### Production Deployment
 1. **Backend Deployment**:
@@ -252,112 +264,38 @@ EXPOSE 3001
 CMD ["npm", "run", "server"]
 ```
 
-## Monitoring and Analytics
+## 🔒 Security
 
-### LiveKit Monitoring
-- **Connection Quality**: Real-time connection metrics
-- **Audio Quality**: Bitrate, packet loss, jitter monitoring
-- **Session Duration**: Interview length and completion rates
-- **Error Tracking**: Connection failures and recovery metrics
-
-### Interview Analytics
-- **Voice Metrics**: Speaking pace, pause analysis, confidence indicators
-- **Response Quality**: AI-powered content analysis
-- **Technical Performance**: Audio quality impact on interview performance
-- **Completion Rates**: Success metrics for voice vs text interviews
-
-## Security Considerations
-
-### LiveKit Security
-- **Token-based Authentication**: Secure room access control
-- **Time-limited Tokens**: Automatic token expiration
-- **Room Isolation**: Secure participant separation
-- **Webhook Verification**: Signed webhook payloads
-
-### API Security
+- **Token-based Authentication**: Secure LiveKit room access
 - **API Key Protection**: Server-side credential management
 - **Rate Limiting**: Protection against API abuse
 - **Input Validation**: Comprehensive request validation
 - **CORS Configuration**: Proper cross-origin setup
 
-## Troubleshooting
-
-### Common Issues
-
-1. **LiveKit Connection Failed**:
-   ```bash
-   # Check LiveKit configuration
-   curl http://localhost:3001/api/livekit/config
-   
-   # Verify environment variables
-   echo $LIVEKIT_API_KEY
-   echo $LIVEKIT_WS_URL
-   ```
-
-2. **Audio Not Working**:
-   - Check microphone permissions in browser
-   - Verify HTTPS connection (required for microphone access)
-   - Test audio devices in browser settings
-
-3. **Voice Interview Not Starting**:
-   - Ensure LiveKit credentials are configured
-   - Check backend logs for connection errors
-   - Verify WebSocket URL is accessible
-
-### Debug Mode
-```bash
-# Enable debug logging
-DEBUG=livekit* npm run server
-```
-
-## Future Enhancements
-
-### Planned Features
-- **Video Interviews**: Full video communication support
-- **AI Voice Synthesis**: Text-to-speech for AI interviewer
-- **Multi-language Support**: International interview practice
-- **Group Interviews**: Multi-participant interview scenarios
-- **Interview Recording**: Session playback and review
-- **Advanced Analytics**: ML-powered voice analysis and insights
-- **Mobile App**: Native mobile application with voice support
-
-### Integration Roadmap
-- **Calendar Integration**: Schedule voice interviews
-- **CRM Integration**: Connect with recruitment platforms
-- **Learning Management**: Structured interview training programs
-- **Enterprise Features**: Team management and analytics dashboards
-
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for voice features if applicable
-5. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-### Development Setup
-```bash
-# Install dependencies
-npm install
+## 📄 License
 
-# Start development with hot reload
-npm run dev
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-# Run tests
-npm test
-
-# Test LiveKit integration
-npm run test:livekit
-```
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Support
+## 🆘 Support
 
 For issues related to:
 - **LiveKit Integration**: Check [LiveKit Documentation](https://docs.livekit.io/)
 - **Voice Features**: Review browser microphone permissions
 - **API Issues**: Check backend logs and health endpoints
 - **General Support**: Create an issue in this repository
+
+## 🙏 Acknowledgments
+
+- [LiveKit](https://livekit.io/) for real-time communication infrastructure
+- [OpenAI](https://openai.com/) for GPT models and Whisper
+- [Google Cloud](https://cloud.google.com/) for Speech and Gemini AI
+- [Anthropic](https://anthropic.com/) for Claude models
+- [React](https://reactjs.org/) and [Vite](https://vitejs.dev/) for the frontend framework

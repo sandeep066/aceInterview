@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Settings, Play, Clock, Building, User, BookOpen, ChevronDown } from 'lucide-react';
 import { InterviewConfig, InterviewStyle, ExperienceLevel } from '../types';
+import { toPythonInterviewConfig } from '../services/apiService';
 
 interface ConfigurationScreenProps {
   onStartInterview: (config: InterviewConfig) => void;
@@ -51,6 +52,10 @@ export const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({ onStar
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (validateForm()) {
+      // Do NOT transform config here if onStartInterview expects InterviewConfig (camelCase)
+      // onStartInterview(config);
+
+      // Only transform to snake_case when sending to the backend, not here.
       onStartInterview(config);
     }
   };

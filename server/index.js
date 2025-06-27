@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { LLMQuestionGenerator } from './llmService.js';
 import { LiveKitService } from './livekitService.js';
 import { VoiceInterviewService } from './voiceInterviewService.js';
+import { AIAgentService } from './aiAgentService.js';
 
 dotenv.config();
 
@@ -18,6 +19,7 @@ app.use(express.json());
 const questionGenerator = new LLMQuestionGenerator();
 const livekitService = new LiveKitService();
 const voiceInterviewService = new VoiceInterviewService(livekitService, questionGenerator);
+const aiAgentService = new AIAgentService();
 
 // Existing text-based interview routes
 app.post('/api/generate-question', async (req, res) => {
@@ -83,10 +85,6 @@ app.post('/api/analyze-response', async (req, res) => {
 
 app.post('/api/generate-analytics', async (req, res) => {
   try {
-    console.log('[pmr] /generate-analytics called');
-    console.log('[pmr] responses:', JSON.stringify(responses, null, 2));
-    console.log('[pmr] config:', JSON.stringify(config, null, 2));
-    
     const { responses, config } = req.body;
     
     const analytics = await questionGenerator.generateComprehensiveAnalytics({
@@ -104,13 +102,13 @@ app.post('/api/generate-analytics', async (req, res) => {
   }
 });
 
-// New LiveKit voice interview routes
+// Enhanced voice interview routes with AI agent support
 app.post('/api/voice-interview/start', async (req, res) => {
   try {
     console.log('[API] Voice interview start request received');
     console.log('[API] Request body:', JSON.stringify(req.body, null, 2));
     
-    const { config, participantName } = req.body;
+    const { config, participantName, enableAIAgent = true, agentProvider } = req.body;
     
     // Validate request body
     if (!config) {
@@ -147,10 +145,43 @@ app.post('/api/voice-interview/start', async (req, res) => {
     console.log('[API] LiveKit is configured, starting voice interview...');
     const interviewData = await voiceInterviewService.startVoiceInterview(config, participantName);
     
+    // Switch provider if requested
+    if (agentProvider && aiAgentService.isServiceEnabled()) {
+      try {
+        aiAgentService.switchProvider(agentProvider);
+        console.log(`[API] Switched to ${agentProvider.toUpperCase()} provider`);
+      } catch (switchError) {
+        console.warn(`[API] Failed to switch to ${agentProvider}, using default:`, switchError.message);
+      }
+    }
+    
+    // Start AI agent if enabled and service is available
+    if (enableAIAgent && aiAgentService.isServiceEnabled()) {
+      try {
+        console.log(`[API] Starting ${aiAgentService.getCurrentProvider().toUpperCase()} AI agent for continuous voice communication...`);
+        
+        await aiAgentService.startAgentForRoom(interviewData.roomName, config);
+        
+        interviewData.aiAgentEnabled = true;
+        interviewData.conversationalMode = true;
+        interviewData.agentProvider = aiAgentService.getCurrentProvider();
+        
+        console.log(`[API] ✅ ${aiAgentService.getCurrentProvider().toUpperCase()} AI agent started successfully`);
+        
+      } catch (agentError) {
+        console.error('[API] ⚠️ Failed to start AI agent, continuing without:', agentError);
+        interviewData.aiAgentEnabled = false;
+        interviewData.conversationalMode = false;
+        interviewData.agentError = agentError.message;
+      }
+    } else {
+      console.log('[API] AI agent disabled or not configured');
+      interviewData.aiAgentEnabled = false;
+      interviewData.conversationalMode = false;
+    }
+    
     console.log('[API] Voice interview started successfully');
     console.log('[API] Response data keys:', Object.keys(interviewData));
-    console.log('[API] Response wsUrl type:', typeof interviewData.wsUrl);
-    console.log('[API] Response wsUrl value:', `"${interviewData.wsUrl}"`);
     
     res.json(interviewData);
   } catch (error) {
@@ -239,6 +270,17 @@ app.post('/api/voice-interview/:sessionId/end', async (req, res) => {
   try {
     const { sessionId } = req.params;
     const result = await voiceInterviewService.endInterview(sessionId);
+    
+    // Stop AI agent if it was running
+    if (aiAgentService.isServiceEnabled()) {
+      try {
+        await aiAgentService.stopAgentForRoom(sessionId);
+        console.log(`[API] AI agent stopped for session: ${sessionId}`);
+      } catch (agentError) {
+        console.warn(`[API] Failed to stop AI agent for session ${sessionId}:`, agentError);
+      }
+    }
+    
     res.json(result);
   } catch (error) {
     console.error('Error ending interview:', error);
@@ -253,6 +295,13 @@ app.get('/api/voice-interview/:sessionId/status', async (req, res) => {
   try {
     const { sessionId } = req.params;
     const status = voiceInterviewService.getSessionStatus(sessionId);
+    
+    // Add AI agent status if available
+    if (aiAgentService.isServiceEnabled()) {
+      const agentStatus = aiAgentService.getAgentStatus(sessionId);
+      status.aiAgent = agentStatus;
+    }
+    
     res.json(status);
   } catch (error) {
     console.error('Error getting session status:', error);
@@ -279,11 +328,95 @@ app.post('/api/voice-interview/:sessionId/reconnect', async (req, res) => {
   }
 });
 
+// AI Agent management routes
+app.get('/api/ai-agent/status', (req, res) => {
+  try {
+    const stats = aiAgentService.getServiceStats();
+    const activeAgents = aiAgentService.getActiveAgents();
+    
+    res.json({
+      service: stats,
+      activeAgents,
+      currentProvider: aiAgentService.getCurrentProvider()
+    });
+  } catch (error) {
+    console.error('Error getting AI agent status:', error);
+    res.status(500).json({
+      error: 'Failed to get AI agent status',
+      message: error.message
+    });
+  }
+});
+
+app.post('/api/ai-agent/switch-provider', (req, res) => {
+  try {
+    const { provider } = req.body;
+    
+    if (!provider || (provider !== 'openai' && provider !== 'google')) {
+      return res.status(400).json({
+        error: 'Invalid provider',
+        message: 'Provider must be either "openai" or "google"'
+      });
+    }
+    
+    const result = aiAgentService.switchProvider(provider);
+    res.json(result);
+  } catch (error) {
+    console.error('Error switching AI agent provider:', error);
+    res.status(500).json({
+      error: 'Failed to switch provider',
+      message: error.message
+    });
+  }
+});
+
+app.post('/api/ai-agent/:roomName/start', async (req, res) => {
+  try {
+    const { roomName } = req.params;
+    const { config, provider } = req.body;
+    
+    // Switch provider if specified
+    if (provider) {
+      aiAgentService.switchProvider(provider);
+    }
+    
+    const result = await aiAgentService.startAgentForRoom(roomName, config);
+    res.json(result);
+  } catch (error) {
+    console.error('Error starting AI agent:', error);
+    res.status(500).json({
+      error: 'Failed to start AI agent',
+      message: error.message
+    });
+  }
+});
+
+app.post('/api/ai-agent/:roomName/stop', async (req, res) => {
+  try {
+    const { roomName } = req.params;
+    
+    const result = await aiAgentService.stopAgentForRoom(roomName);
+    res.json(result);
+  } catch (error) {
+    console.error('Error stopping AI agent:', error);
+    res.status(500).json({
+      error: 'Failed to stop AI agent',
+      message: error.message
+    });
+  }
+});
+
 // Admin routes
 app.get('/api/voice-interview/sessions/active', (req, res) => {
   try {
     const sessions = voiceInterviewService.getActiveSessions();
-    res.json({ sessions });
+    const agents = aiAgentService.getActiveAgents();
+    
+    res.json({ 
+      sessions,
+      aiAgents: agents,
+      currentProvider: aiAgentService.getCurrentProvider()
+    });
   } catch (error) {
     console.error('Error getting active sessions:', error);
     res.status(500).json({
@@ -304,13 +437,20 @@ app.get('/api/livekit/config', (req, res) => {
     
     const configured = livekitService.isConfigured();
     const wsUrl = livekitService.getWebSocketUrl();
+    const aiAgentStats = aiAgentService.getServiceStats();
     
     console.log('[API] LiveKit configured:', configured);
     console.log('[API] LiveKit wsUrl:', `"${wsUrl}"`);
+    console.log('[API] AI Agent service enabled:', aiAgentStats.enabled);
+    console.log('[API] AI Agent provider:', aiAgentService.getCurrentProvider());
     
     res.json({
       configured,
       wsUrl: configured ? wsUrl : null,
+      aiAgent: {
+        ...aiAgentStats,
+        currentProvider: aiAgentService.getCurrentProvider()
+      },
       timestamp: new Date().toISOString(),
       debug: {
         hasApiKey: !!process.env.LIVEKIT_API_KEY,
@@ -352,6 +492,12 @@ app.get('/api/health', async (req, res) => {
           questionGeneration: !!questionGenerator.agenticOrchestrator,
           performanceAnalysis: !!questionGenerator.performanceAnalysisOrchestrator,
           status: questionGenerator.agenticOrchestrator ? 'operational' : 'fallback'
+        },
+        aiAgent: {
+          enabled: aiAgentService.isServiceEnabled(),
+          provider: aiAgentService.getCurrentProvider(),
+          activeAgents: aiAgentService.getActiveAgents().length,
+          status: aiAgentService.isServiceEnabled() ? 'operational' : 'disabled'
         }
       },
       system: {
@@ -371,7 +517,6 @@ app.get('/api/health', async (req, res) => {
     try {
       // Test LLM service availability
       if (questionGenerator.apiKey) {
-        // Could add a simple test call here if needed
         healthStatus.services.llm.lastCheck = new Date().toISOString();
       }
 
@@ -379,6 +524,12 @@ app.get('/api/health', async (req, res) => {
       if (questionGenerator.agenticOrchestrator) {
         const agenticStats = questionGenerator.getAgenticStats();
         healthStatus.services.agentic.stats = agenticStats;
+      }
+
+      // Test AI agent service stats
+      if (aiAgentService.isServiceEnabled()) {
+        const agentStats = aiAgentService.getServiceStats();
+        healthStatus.services.aiAgent.stats = agentStats;
       }
 
     } catch (serviceError) {
@@ -415,7 +566,8 @@ app.get('/api/health', async (req, res) => {
       services: {
         llm: { status: 'unknown' },
         livekit: { status: 'unknown' },
-        agentic: { status: 'unknown' }
+        agentic: { status: 'unknown' },
+        aiAgent: { status: 'unknown' }
       }
     });
   }
@@ -448,7 +600,9 @@ app.get('/api/system/info', (req, res) => {
         port: PORT,
         llmProvider: questionGenerator.provider?.toUpperCase() || 'UNKNOWN',
         livekitConfigured: livekitService.isConfigured(),
-        agenticFramework: !!questionGenerator.agenticOrchestrator
+        agenticFramework: !!questionGenerator.agenticOrchestrator,
+        aiAgentService: aiAgentService.isServiceEnabled(),
+        voiceAgentProvider: aiAgentService.getCurrentProvider()
       }
     };
 
@@ -482,9 +636,6 @@ app.post('/api/livekit/webhook', (req, res) => {
     const { event, room, participant } = req.body;
     console.log(`LiveKit webhook: ${event}`, { room: room?.name, participant: participant?.identity });
 
-    // You can add custom logic here to handle specific events
-    // For example: participant_joined, participant_left, room_finished, etc.
-
     res.json({ received: true });
   } catch (error) {
     console.error('Error handling LiveKit webhook:', error);
@@ -493,13 +644,25 @@ app.post('/api/livekit/webhook', (req, res) => {
 });
 
 // Graceful shutdown handling
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully');
+  
+  // Stop all AI agents
+  if (aiAgentService.isServiceEnabled()) {
+    await aiAgentService.stopAllAgents();
+  }
+  
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('SIGINT received, shutting down gracefully');
+  
+  // Stop all AI agents
+  if (aiAgentService.isServiceEnabled()) {
+    await aiAgentService.stopAllAgents();
+  }
+  
   process.exit(0);
 });
 
@@ -526,5 +689,16 @@ app.listen(PORT, () => {
   if (questionGenerator.agenticOrchestrator) {
     const stats = questionGenerator.getAgenticStats();
     console.log(`📈 Agentic Stats:`, stats);
+  }
+
+  // Log AI Agent service status
+  console.log(`🤖 AI Agent Service: ${aiAgentService.isServiceEnabled() ? 'ENABLED' : 'DISABLED'}`);
+  console.log(`🎙️ Voice Agent Provider: ${aiAgentService.getCurrentProvider().toUpperCase()}`);
+  
+  if (aiAgentService.isServiceEnabled()) {
+    const agentStats = aiAgentService.getServiceStats();
+    console.log(`🎙️ AI Agent Stats:`, agentStats);
+  } else {
+    console.log(`⚠️  To enable AI agents, ensure required API keys are configured`);
   }
 });

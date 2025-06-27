@@ -1,4 +1,5 @@
-import { InterviewConfig, Question, AnalyticsData, InterviewResponse } from '../types';
+import { InterviewConfig, Question, InterviewResponse } from '../types';
+import type { AnalyticsData } from '../types';
 import { APIService } from '../services/apiService';
 
 export class AIInterviewSimulator {
@@ -365,16 +366,19 @@ export class AIInterviewSimulator {
           responses: this.responses,
           config: this.config
         });
-        
+
         const duration = Date.now() - startTime;
         console.log(`✅ Agentic analytics completed in ${duration}ms`);
-        
-        // Add early termination info to metadata
-        if (analytics.metadata) {
-          analytics.metadata.wasEndedEarly = this.wasEndedEarly();
-          analytics.metadata.completionRate = (this.responses.length / this.calculateMaxQuestions()) * 100;
+
+        // Ensure analytics has a metadata property (fix for type error)
+        if (analytics && typeof analytics === 'object') {
+          if (!('metadata' in analytics) || typeof analytics.metadata !== 'object') {
+            (analytics as any).metadata = {};
+          }
+          (analytics as any).metadata.wasEndedEarly = this.wasEndedEarly();
+          (analytics as any).metadata.completionRate = (this.responses.length / this.calculateMaxQuestions()) * 100;
         }
-        
+
         return analytics;
       } catch (error) {
         console.error('Error generating LLM analytics:', error);
@@ -404,6 +408,7 @@ export class AIInterviewSimulator {
     const improvements = this.generateImprovements(responseAnalysis);
     const questionReviews = this.generateQuestionReviews();
 
+    // Add 'metadata' to AnalyticsData type in your types file if not already present
     return {
       overallScore,
       strengths,
