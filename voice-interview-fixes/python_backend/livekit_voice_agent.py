@@ -1,36 +1,19 @@
 """
-LiveKit Voice Agent: Joins a LiveKit room as an AI agent and converses using LLM and TTS.
+LiveKit Voice Agent: Enhanced Google AI integration with proper audio streaming
 """
 
 import sys
 import os
 import asyncio
 import json
-from typing import Dict, Any
+import io
+import wave
+from typing import Optional, Dict, Any
+from livekit.agents import VoiceAiAgent, VoiceAiAgentOptions, RoomOptions, AudioOptions
+from livekit import rtc
 import numpy as np
 
-# Import LiveKit client SDK
-try:
-    from livekit import rtc
-    print("✅ LiveKit client SDK imported successfully")
-except ImportError:
-    print("❌ Failed to import LiveKit client SDK")
-    print("Installing livekit...")
-    import subprocess
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "livekit"])
-    from livekit import rtc
-
-# Import Google libraries if available
-try:
-    import google.generativeai as genai
-    from google.cloud import texttospeech, speech
-    print("✅ Google libraries imported successfully")
-except ImportError:
-    print("⚠️ Google libraries not available")
-
 class GoogleAIVoiceAgent:
-    """Google AI-powered voice agent for interview conversations"""
-    
     def __init__(self):
         self.room_name = None
         self.agent_token = None
@@ -49,28 +32,23 @@ class GoogleAIVoiceAgent:
         try:
             # Google Gemini AI
             if os.getenv("GEMINI_API_KEY"):
+                from google.generativeai import GenerativeModel
+                import google.generativeai as genai
                 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-                self.gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+                self.gemini_model = GenerativeModel('gemini-2.0-flash-exp')
                 print("✅ Google Gemini AI initialized")
-            else:
-                print("⚠️ GEMINI_API_KEY not set")
-                self.gemini_model = None
             
             # Google Cloud Text-to-Speech
             if os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+                from google.cloud import texttospeech
                 self.tts_client = texttospeech.TextToSpeechClient()
                 print("✅ Google Cloud TTS initialized")
-            else:
-                print("⚠️ GOOGLE_APPLICATION_CREDENTIALS not set")
-                self.tts_client = None
             
             # Google Cloud Speech-to-Text
             if os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+                from google.cloud import speech
                 self.speech_client = speech.SpeechClient()
                 print("✅ Google Cloud STT initialized")
-            else:
-                print("⚠️ GOOGLE_APPLICATION_CREDENTIALS not set")
-                self.speech_client = None
                 
         except Exception as e:
             print(f"❌ Error initializing Google services: {e}")
@@ -82,8 +60,6 @@ class GoogleAIVoiceAgent:
         
         try:
             print(f"🤖 Google AI Agent connecting to room: {room_name}")
-            print(f"🔑 Using token: {agent_token[:10]}... (truncated)")
-            print(f"🌐 LiveKit URL: {os.getenv('LIVEKIT_WS_URL')}")
             
             # Connect to room
             self.room = rtc.Room()
@@ -162,19 +138,19 @@ class GoogleAIVoiceAgent:
             print(f"🗣️ Google AI speaking: {text[:50]}...")
             
             # Configure TTS request
-            synthesis_input = texttospeech.SynthesisInput(text=text)
-            voice = texttospeech.VoiceSelectionParams(
-                language_code="en-US",
-                name="en-US-Neural2-F",  # Female voice
-                ssml_gender=texttospeech.SsmlVoiceGender.FEMALE
-            )
-            audio_config = texttospeech.AudioConfig(
-                audio_encoding=texttospeech.AudioEncoding.LINEAR16,
-                sample_rate_hertz=24000,
-                speaking_rate=1.0,
-                pitch=0.0,
-                volume_gain_db=0.0
-            )
+            synthesis_input = {"text": text}
+            voice = {
+                "language_code": "en-US",
+                "name": "en-US-Neural2-F",  # Female voice
+                "ssml_gender": "FEMALE"
+            }
+            audio_config = {
+                "audio_encoding": "LINEAR16",
+                "sample_rate_hertz": 24000,
+                "speaking_rate": 1.0,
+                "pitch": 0.0,
+                "volume_gain_db": 0.0
+            }
             
             # Synthesize speech
             response = self.tts_client.synthesize_speech(
@@ -238,7 +214,7 @@ class GoogleAIVoiceAgent:
             print(f"🎤 Subscribed to audio track from: {participant.identity}")
             
             # Set up audio processing for speech recognition
-            track.on("frame", self.on_audio_frame)
+            track.on("frame_received", self.on_audio_frame)
             
     async def on_audio_frame(self, frame):
         """Process incoming audio frame for speech recognition"""
@@ -247,6 +223,7 @@ class GoogleAIVoiceAgent:
             
         try:
             # Convert frame to format suitable for Google STT
+            # This is a simplified version - you might need more sophisticated buffering
             audio_data = frame.data
             
             # Process with Google Speech-to-Text
@@ -262,18 +239,21 @@ class GoogleAIVoiceAgent:
             
         try:
             # Configure recognition
-            config = speech.RecognitionConfig(
-                encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-                sample_rate_hertz=24000,
-                language_code="en-US",
-                enable_automatic_punctuation=True,
-                model="latest_long"
-            )
+            config = {
+                "encoding": "LINEAR16",
+                "sample_rate_hertz": 24000,
+                "language_code": "en-US",
+                "enable_automatic_punctuation": True,
+                "model": "latest_long"
+            }
             
-            audio = speech.RecognitionAudio(content=audio_data)
+            audio = {"content": audio_data}
             
             # Recognize speech
-            response = self.speech_client.recognize(config=config, audio=audio)
+            response = self.speech_client.recognize(
+                config=config,
+                audio=audio
+            )
             
             # Process results
             for result in response.results:
@@ -385,9 +365,6 @@ class GoogleAIVoiceAgent:
             elif message.get('type') == 'stop_listening':
                 self.is_listening = False
                 print("🔇 Stopped listening for user speech")
-            elif message.get('type') == 'user_speech_live':
-                # Process live speech from frontend
-                await self.handle_user_speech(message.get('text', ''))
                 
         except Exception as e:
             print(f"❌ Error processing data message: {e}")
@@ -402,8 +379,6 @@ async def main():
     agent_token = sys.argv[2]
 
     print(f"🚀 Starting Google AI Voice Agent for room: {room_name}")
-    print(f"🔑 Using token: {agent_token[:10]}... (truncated)")
-    print(f"🌐 LiveKit URL: {os.getenv('LIVEKIT_WS_URL')}")
 
     # Create and run agent
     agent = GoogleAIVoiceAgent()
@@ -421,7 +396,7 @@ async def main():
     except Exception as e:
         print(f"❌ Agent error: {e}")
     finally:
-        if hasattr(agent, 'room') and agent.room:
+        if agent.room:
             await agent.room.disconnect()
         print("👋 Google AI Voice Agent disconnected")
 

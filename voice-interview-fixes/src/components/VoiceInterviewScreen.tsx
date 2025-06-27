@@ -240,7 +240,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
           audioElement.autoplay = true;
           audioElement.playsInline = true;
           audioElement.volume = 1.0;
-          audioElement.controls = true; // Show controls for debugging
+          audioElement.controls = false; // Hide controls
           
           // Enhanced event listeners with better debugging
           audioElement.onloadstart = () => {

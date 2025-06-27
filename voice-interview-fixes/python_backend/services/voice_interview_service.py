@@ -1,26 +1,24 @@
 """
-Voice Interview Service for Python backend
+Enhanced Voice Interview Service with proper Google AI agent integration
 """
 from typing import Dict, Any, Optional
 from loguru import logger
 import subprocess
 import sys
 import os
-import time
-import threading
 
 from .livekit_service import LiveKitService
 from models.interview_models import InterviewConfig
 
 class VoiceInterviewService:
-    """Voice interview service with enhanced Google AI agent support"""
+    """Enhanced voice interview service with Google AI agent support"""
     
     def __init__(self, livekit_service: LiveKitService):
         self.livekit = livekit_service
         self.active_interviews: Dict[str, Dict[str, Any]] = {}
         self.active_agents: Dict[str, subprocess.Popen] = {}
         
-        logger.info("[VoiceInterviewService] Voice interview service initialized")
+        logger.info("[VoiceInterviewService] Enhanced voice interview service initialized")
     
     async def start_voice_interview(
         self,
@@ -29,27 +27,21 @@ class VoiceInterviewService:
         enable_ai_agent: bool = True,
         agent_provider: str = "google"
     ) -> Dict[str, Any]:
-        """Start a new voice interview session"""
+        """Start a new voice interview session with enhanced Google AI agent"""
         try:
             logger.info(f"[VoiceInterviewService] Starting voice interview for {participant_name}")
-            print(f"[VoiceInterviewService] participant_name: {participant_name}")
-            print(f"[VoiceInterviewService] Provider: {agent_provider}, AI Agent: {enable_ai_agent}")
+            logger.info(f"[VoiceInterviewService] Provider: {agent_provider}, AI Agent: {enable_ai_agent}")
 
             # Validate required fields
             if not participant_name:
-                logger.error("[VoiceInterviewService] Missing participant_name")
                 raise ValueError("participant_name is required")
             
             # Create LiveKit room
             config_data = config.model_dump()
-            logger.debug(f"[VoiceInterviewService] Creating LiveKit room with config: {config_data}")
-            
             room_data = await self.livekit.create_interview_room(
                 config_data,
                 participant_name
             )
-            
-            logger.debug(f"[VoiceInterviewService] Room data created: {room_data}")
             
             # Initialize interview session
             session_id = room_data["room_name"]
@@ -58,7 +50,7 @@ class VoiceInterviewService:
                 "room_name": room_data["room_name"],
                 "config": config.model_dump(),
                 "participant_name": participant_name,
-                "start_time": time.time(),
+                "start_time": "2024-01-01T00:00:00Z",
                 "current_question_index": 0,
                 "questions": [],
                 "responses": [],
@@ -75,26 +67,19 @@ class VoiceInterviewService:
             self.active_interviews[session_id] = interview_session
             
             # Start AI agent if enabled
-            agent_started = False
             if enable_ai_agent:
-                try:
-                    self._start_ai_agent_process(session_id, room_data, agent_provider)
-                    agent_started = True
-                    logger.info(f"[VoiceInterviewService] AI agent started for session: {session_id}")
-                except Exception as agent_error:
-                    logger.error(f"[VoiceInterviewService] Failed to start AI agent: {agent_error}")
-                    # Continue without agent
+                await self.start_ai_agent(session_id, room_data, agent_provider)
             
             response_data = {
                 "session_id": session_id,
                 "room_name": room_data["room_name"],
                 "ws_url": room_data["ws_url"],
                 "participant_token": room_data["participant_token"],
-                "interviewer_token": room_data["interviewer_token"],
+                "interviewer_token": room_data["interviewer_token"],  # Include for agent
                 "first_question": "Welcome to your voice interview. The AI agent will greet you shortly.",
                 "config": config.model_dump(),
-                "ai_agent_enabled": agent_started,
-                "conversational_mode": agent_started,
+                "ai_agent_enabled": enable_ai_agent,
+                "conversational_mode": enable_ai_agent,
                 "agent_provider": agent_provider
             }
             
@@ -105,29 +90,24 @@ class VoiceInterviewService:
             logger.error(f"[VoiceInterviewService] Error starting voice interview: {error}")
             raise Exception(f"Failed to start voice interview: {error}")
     
-    def _start_ai_agent_process(self, session_id: str, room_data: Dict[str, Any], provider: str):
+    async def start_ai_agent(self, session_id: str, room_data: Dict[str, Any], provider: str):
         """Start the AI agent process for the interview"""
         try:
             logger.info(f"[VoiceInterviewService] Starting {provider.upper()} AI agent for session: {session_id}")
             
-            # Path to the voice agent script
-            agent_script = os.path.join(os.path.dirname(os.path.dirname(__file__)), "livekit_voice_agent.py")
-            logger.debug(f"[VoiceInterviewService] Agent script path: {agent_script}")
-            
-            if not os.path.exists(agent_script):
-                logger.error(f"[VoiceInterviewService] Agent script not found at: {agent_script}")
-                raise FileNotFoundError(f"Agent script not found: {agent_script}")
+            # Path to the enhanced voice agent script
+            agent_script = os.path.join(os.path.dirname(__file__), "..", "livekit_voice_agent.py")
             
             # Prepare environment variables
             env = os.environ.copy()
             env.update({
                 "LIVEKIT_WS_URL": room_data["ws_url"],
-                "LIVEKIT_API_KEY": os.getenv("LIVEKIT_API_KEY", ""),
-                "LIVEKIT_API_SECRET": os.getenv("LIVEKIT_API_SECRET", ""),
+                "LIVEKIT_API_KEY": os.getenv("LIVEKIT_API_KEY"),
+                "LIVEKIT_API_SECRET": os.getenv("LIVEKIT_API_SECRET"),
                 "VOICE_AGENT_PROVIDER": provider,
-                "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY", ""),
-                "GOOGLE_APPLICATION_CREDENTIALS": os.getenv("GOOGLE_APPLICATION_CREDENTIALS", ""),
-                "GOOGLE_CLOUD_PROJECT_ID": os.getenv("GOOGLE_CLOUD_PROJECT_ID", ""),
+                "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY"),
+                "GOOGLE_APPLICATION_CREDENTIALS": os.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
+                "GOOGLE_CLOUD_PROJECT_ID": os.getenv("GOOGLE_CLOUD_PROJECT_ID"),
             })
             
             # Start the agent process
@@ -147,21 +127,20 @@ class VoiceInterviewService:
             # Monitor the process in background
             self._monitor_agent_process(session_id, process, provider)
             
-            return True
-            
         except Exception as error:
             logger.error(f"[VoiceInterviewService] Error starting AI agent: {error}")
             raise
     
     def _monitor_agent_process(self, session_id: str, process: subprocess.Popen, provider: str):
         """Monitor AI agent process in background"""
+        import threading
+        
         def monitor():
             try:
                 stdout, stderr = process.communicate()
                 if process.returncode != 0:
                     logger.error(f"[VoiceInterviewService] {provider.upper()} AI agent exited with code {process.returncode}")
-                    if stderr:
-                        logger.error(f"[VoiceInterviewService] STDERR: {stderr}")
+                    logger.error(f"[VoiceInterviewService] STDERR: {stderr}")
                 else:
                     logger.info(f"[VoiceInterviewService] {provider.upper()} AI agent completed successfully")
                     
@@ -204,7 +183,7 @@ class VoiceInterviewService:
                 "total": 5,
                 "percentage": (session["current_question_index"] / 5) * 100
             },
-            "duration": time.time() - session["start_time"],
+            "duration": 0,
             "questions_asked": len(session["questions"]),
             "responses_given": len(session["responses"])
         }
@@ -233,7 +212,7 @@ class VoiceInterviewService:
             
             # Update session status
             session["status"] = "completed"
-            session["end_time"] = time.time()
+            session["end_time"] = "2024-01-01T00:00:00Z"
             
             return {
                 "completed": True,
