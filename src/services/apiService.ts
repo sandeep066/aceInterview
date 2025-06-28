@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { InterviewConfig, AnalyticsData, InterviewResponse } from '../types';
+import { InterviewConfig, AnalyticsData, InterviewResponse } from '../types/index';
 import { convertKeysToSnake, convertKeysToCamel } from '../utils/caseConversion';
 
 // Check if we should use Python backend

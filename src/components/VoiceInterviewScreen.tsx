@@ -26,11 +26,12 @@ import {
   CheckCircle,
   XCircle
 } from 'lucide-react';
-import { InterviewConfig } from '../types';
+import { InterviewConfig } from '../types/index';
 import { AIInterviewSimulator } from '../utils/aiSimulator';
 import { useLiveKit } from '../hooks/useLiveKit';
 import { VoiceInterviewService } from '../services/voiceInterviewService';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
+import { toPythonInterviewConfig } from '../services/apiService';
 
 interface VoiceInterviewScreenProps {
   config: InterviewConfig;
@@ -64,7 +65,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   const [showProviderSelection, setShowProviderSelection] = useState(false);
   const [showAutoplayPrompt, setShowAutoplayPrompt] = useState(false);
   const [audioTestResult, setAudioTestResult] = useState<'none' | 'success' | 'failed'>('none');
-  const [audioDebugInfo, setAudioDebugInfo] = useState<any>({});
   
   // Audio management refs
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -84,15 +84,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   const handleDataMessage = useCallback((data: any) => {
     console.log('[VoiceInterview] 📨 Received data message:', data);
     
-    if (data.type === 'greeting' && data.text) {
-      setCurrentQuestion(data.text);
-      setConversationHistory(prev => [...prev, {
-        speaker: 'ai',
-        message: data.text,
-        timestamp: Date.now(),
-        type: 'greeting'
-      }]);
-    } else if (data.type === 'question' && data.text) {
+    if (data.type === 'question' && data.text) {
       setCurrentQuestion(data.text);
       setConversationHistory(prev => [...prev, {
         speaker: 'ai',
@@ -100,36 +92,31 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         timestamp: Date.now(),
         type: 'question'
       }]);
-    } else if (data.type === 'ai_response' && data.text) {
+    } else if (data.type === 'greeting' && data.text) {
+      setCurrentQuestion(data.text);
       setConversationHistory(prev => [...prev, {
         speaker: 'ai',
         message: data.text,
         timestamp: Date.now(),
-        type: 'response'
+        type: 'greeting'
       }]);
-    } else if (data.type === 'user_speech' && data.text) {
+    } else if (data.type === 'feedback' && data.text) {
       setConversationHistory(prev => [...prev, {
-        speaker: 'user',
+        speaker: 'ai',
         message: data.text,
         timestamp: Date.now(),
-        type: 'speech'
+        type: 'feedback'
       }]);
     }
   }, []);
 
-  // Create LiveKit props
+  // Create LiveKit props using the backend-provided URL when we have a session
   const livekitProps = voiceSession && voiceSession.participantToken ? {
     wsUrl: voiceSession.wsUrl,
     token: voiceSession.participantToken,
     onConnected: () => {
       setConnectionStatus('connected');
       console.log('[VoiceInterview] ✅ Connected to LiveKit room');
-      
-      // Send start listening message to AI agent
-      sendDataMessage({
-        type: 'start_listening',
-        timestamp: Date.now()
-      });
     },
     onDisconnected: () => {
       setConnectionStatus('disconnected');
@@ -142,7 +129,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     onDataMessageReceived: handleDataMessage
   } : null;
 
-  // Initialize LiveKit hook
+  // Only initialize LiveKit hook when we have valid props
   const {
     room,
     isConnected: livekitConnected,
@@ -170,11 +157,13 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   useEffect(() => {
     const initializeAudio = async () => {
       try {
+        // Initialize AudioContext for better audio control
         if (!audioContextRef.current) {
           audioContextRef.current = new ((window as any).AudioContext || (window as any).webkitAudioContext)();
           console.log('🎵 AudioContext initialized');
         }
 
+        // Initialize Speech Synthesis for fallback TTS
         if ('speechSynthesis' in window) {
           speechSynthesisRef.current = window.speechSynthesis;
           console.log('🗣️ Speech Synthesis initialized');
@@ -188,12 +177,14 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     initializeAudio();
 
     return () => {
+      // Cleanup audio elements
       audioElementsRef.current.forEach(audio => {
         audio.pause();
         audio.remove();
       });
       audioElementsRef.current.clear();
 
+      // Close audio context
       if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
         audioContextRef.current.close();
       }
@@ -211,65 +202,31 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     return () => clearInterval(interval);
   }, [isInterviewActive, startTime]);
 
-  // Enhanced remote audio track handling with better debugging
+  // Enhanced remote audio track handling with proper audio playback and autoplay detection
   useEffect(() => {
     if (remoteAudioTracks.length > 0) {
       console.log(`🎵 Processing ${remoteAudioTracks.length} remote audio tracks`);
       
-      setAudioDebugInfo(prev => ({
-        ...prev,
-        remoteTracksCount: remoteAudioTracks.length,
-        lastTrackUpdate: new Date().toISOString()
-      }));
-      
       remoteAudioTracks.forEach((track, index) => {
         const trackId = track.sid || `track-${index}`;
         
-        console.log(`🎵 Processing track ${trackId}:`, {
-          sid: track.sid,
-          source: track.source,
-          enabled: track.isEnabled,
-          muted: track.isMuted,
-          kind: track.kind
-        });
-        
+        // Check if we already have an audio element for this track
         if (!audioElementsRef.current.has(trackId)) {
           console.log(`🎵 Creating new audio element for track: ${trackId}`);
           
+          // Create audio element
           const audioElement = document.createElement('audio') as any;
           audioElement.autoplay = true;
           audioElement.playsInline = true;
           audioElement.volume = 1.0;
-          audioElement.controls = true; // Show controls for debugging
           
-          // Enhanced event listeners with better debugging
-          audioElement.onloadstart = () => {
-            console.log(`🎵 Audio loading started for track: ${trackId}`);
-            setAudioDebugInfo(prev => ({
-              ...prev,
-              [`track_${trackId}_status`]: 'loading'
-            }));
-          };
-          
-          audioElement.oncanplay = () => {
-            console.log(`🎵 Audio can play for track: ${trackId}`);
-            setAudioDebugInfo(prev => ({
-              ...prev,
-              [`track_${trackId}_status`]: 'ready'
-            }));
-          };
-          
+          // Set up event listeners
           audioElement.onplay = () => {
             console.log(`🎵 Audio started playing for track: ${trackId}`);
             setIsAISpeaking(true);
             setUserSpeaking(false);
             setShowAutoplayPrompt(false);
-            setAudioDebugInfo(prev => ({
-              ...prev,
-              [`track_${trackId}_status`]: 'playing',
-              lastPlayEvent: new Date().toISOString()
-            }));
-            
+            // Stop user listening when AI starts speaking
             if (isListening) {
               stopListening();
             }
@@ -278,11 +235,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
           audioElement.onended = () => {
             console.log(`🎵 Audio ended for track: ${trackId}`);
             setIsAISpeaking(false);
-            setAudioDebugInfo(prev => ({
-              ...prev,
-              [`track_${trackId}_status`]: 'ended'
-            }));
-            
+            // Resume listening after AI finishes speaking
             setTimeout(() => {
               if (isInterviewActive && !isListening) {
                 startListening();
@@ -294,24 +247,19 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
           audioElement.onpause = () => {
             console.log(`🎵 Audio paused for track: ${trackId}`);
             setIsAISpeaking(false);
-            setAudioDebugInfo(prev => ({
-              ...prev,
-              [`track_${trackId}_status`]: 'paused'
-            }));
           };
           
           audioElement.onerror = (error: any) => {
             console.error(`❌ Audio error for track ${trackId}:`, error);
             setIsAISpeaking(false);
-            setAudioDebugInfo(prev => ({
-              ...prev,
-              [`track_${trackId}_status`]: 'error',
-              [`track_${trackId}_error`]: error.message || 'Unknown error'
-            }));
           };
           
-          audioElement.onvolumechange = () => {
-            console.log(`🔊 Volume changed for track ${trackId}: ${audioElement.volume}`);
+          audioElement.onloadstart = () => {
+            console.log(`🎵 Audio loading started for track: ${trackId}`);
+          };
+          
+          audioElement.oncanplay = () => {
+            console.log(`🎵 Audio can play for track: ${trackId}`);
           };
           
           // Attach the track to the audio element
@@ -319,41 +267,23 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
             track.attach(audioElement);
             console.log(`🎵 Track attached to audio element: ${trackId}`);
             
-            // Add to DOM (visible for debugging)
-            audioElement.style.position = 'fixed';
-            audioElement.style.bottom = '10px';
-            audioElement.style.right = '10px';
-            audioElement.style.width = '200px';
-            audioElement.style.height = '40px';
-            audioElement.style.zIndex = '9999';
-            audioElement.style.backgroundColor = 'rgba(0,0,0,0.8)';
-            audioElement.style.border = '1px solid #ccc';
-            audioElement.title = `AI Audio Track: ${trackId}`;
-            
+            // Add to DOM (hidden)
+            audioElement.style.display = 'none';
             document.body.appendChild(audioElement);
             
+            // Store reference
             audioElementsRef.current.set(trackId, audioElement);
             
-            // Force play with better error handling
+            // Force play if needed (handle autoplay restrictions)
             const playPromise = audioElement.play();
             if (playPromise) {
               playPromise
                 .then(() => {
                   console.log(`✅ Audio autoplay successful for track: ${trackId}`);
                   setShowAutoplayPrompt(false);
-                  setAudioDebugInfo(prev => ({
-                    ...prev,
-                    [`track_${trackId}_autoplay`]: 'success'
-                  }));
                 })
                 .catch((error: any) => {
                   console.warn(`⚠️ Autoplay prevented for track ${trackId}:`, error);
-                  setAudioDebugInfo(prev => ({
-                    ...prev,
-                    [`track_${trackId}_autoplay`]: 'failed',
-                    [`track_${trackId}_autoplay_error`]: error.message
-                  }));
-                  
                   if (error.name === 'NotAllowedError') {
                     setShowAutoplayPrompt(true);
                   }
@@ -362,10 +292,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
             
           } catch (attachError) {
             console.error(`❌ Error attaching track ${trackId}:`, attachError);
-            setAudioDebugInfo(prev => ({
-              ...prev,
-              [`track_${trackId}_attach_error`]: attachError.message
-            }));
           }
         }
       });
@@ -379,14 +305,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         audioElement.pause();
         audioElement.remove();
         audioElementsRef.current.delete(trackId);
-        
-        setAudioDebugInfo(prev => {
-          const newInfo = { ...prev };
-          delete newInfo[`track_${trackId}_status`];
-          delete newInfo[`track_${trackId}_error`];
-          delete newInfo[`track_${trackId}_autoplay`];
-          return newInfo;
-        });
       }
     });
 
@@ -426,7 +344,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     if (voiceSession && voiceSession.participantToken && !livekitReady) {
       console.log('[VoiceInterview] Session ready, preparing LiveKit connection');
       setLivekitReady(true);
-      
+
       setTimeout(async () => {
         try {
           console.log('[VoiceInterview] ========== ATTEMPTING LIVEKIT CONNECTION ==========');
@@ -454,23 +372,38 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         }
       }, 200);
     }
-  }, [voiceSession, livekitReady, connectLiveKit, speechSupported, startListening, isListening]);
+    // Only run once when voiceSession and livekitReady change from false to true
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceSession, livekitReady]);
 
   // Handle transcript changes
   useEffect(() => {
     if (transcript && transcript.trim().length > 0) {
       setUserSpeaking(true);
       
-      // Send user speech to AI agent via data message
-      if (sendDataMessage && isInterviewActive) {
-        sendDataMessage({
-          type: 'user_speech_live',
-          text: transcript,
-          timestamp: Date.now()
+      // Add user speech to conversation history
+      const lastEntry = conversationHistory[conversationHistory.length - 1];
+      if (!lastEntry || lastEntry.speaker !== 'user' || lastEntry.type !== 'speaking') {
+        setConversationHistory(prev => [...prev, {
+          speaker: 'user',
+          message: transcript,
+          timestamp: Date.now(),
+          type: 'speaking'
+        }]);
+      } else {
+        // Update the last user entry
+        setConversationHistory(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            ...updated[updated.length - 1],
+            message: transcript,
+            timestamp: Date.now()
+          };
+          return updated;
         });
       }
     }
-  }, [transcript, sendDataMessage, isInterviewActive]);
+  }, [transcript, conversationHistory]);
 
   // Enable audio function for autoplay prompt
   const enableAudio = () => {
@@ -485,6 +418,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   // Fallback Text-to-Speech function
   const speakTextFallback = (text: string) => {
     if (speechSynthesisRef.current) {
+      // Cancel any ongoing speech
       speechSynthesisRef.current.cancel();
       
       const utterance = new SpeechSynthesisUtterance(text);
@@ -492,6 +426,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       utterance.pitch = 1.0;
       utterance.volume = 1.0;
       
+      // Try to use a female voice
       const voices = speechSynthesisRef.current.getVoices();
       const femaleVoice = voices.find(voice => 
         voice.name.toLowerCase().includes('female') || 
@@ -540,6 +475,20 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  // Local utility to convert snake_case keys to camelCase (shallow, for session object)
+  function camelCaseSession(obj: any): any {
+    if (!obj || typeof obj !== 'object') return obj;
+    const toCamel = (s: string) =>
+      s.replace(/([-_][a-z])/g, group =>
+        group.toUpperCase().replace('-', '').replace('_', '')
+      );
+    const result: any = {};
+    for (const key in obj) {
+      result[toCamel(key)] = obj[key];
+    }
+    return result;
+  }
+
   const startVoiceInterview = async () => {
     try {
       setIsThinking(true);
@@ -550,6 +499,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       console.log('[VoiceInterview] Selected provider:', selectedProvider);
       console.log('[VoiceInterview] participant name:', participantName);
 
+      
       const session = await VoiceInterviewService.startVoiceInterview(
         config,
         participantName,
@@ -561,6 +511,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         throw new Error('No session received from backend');
       }
 
+      // Defensive: log session object and check for participantToken
       console.log('[VoiceInterview] Session object:', session);
 
       const participantToken = session.participantToken;
@@ -568,6 +519,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         throw new Error('No participant token received from backend');
       }
 
+      // Set the session
       setVoiceSession(session);
       setAiAgentStatus({
         enabled: session.aiAgentEnabled,
@@ -575,6 +527,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         conversational: session.conversationalMode
       });
 
+      // Clear conversation history - it will be populated by data messages
       setConversationHistory([]);
       setCurrentQuestion('');
 
@@ -705,6 +658,8 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
   };
 
   const progress = simulator.getProgress();
+
+  // Safe participant count with null checks
   const participantCount = room?.numParticipants ?? 0;
 
   return (
@@ -888,6 +843,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                   <div className="text-red-800 text-sm">
                     <p className="font-medium mb-1">Connection Error</p>
                     <p className="mb-2">
+                      {/* Fix: livekitError may be a string or an object */}
                       {typeof livekitError === 'string'
                         ? livekitError
                         : (livekitError as any)?.message || String(livekitError)}
@@ -1043,7 +999,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                               <span className={`text-xs px-2 py-1 rounded-full mt-2 inline-block ${
                                 entry.type === 'greeting' ? 'bg-green-100 text-green-700' :
                                 entry.type === 'question' ? 'bg-blue-100 text-blue-700' :
-                                entry.type === 'speech' ? 'bg-yellow-100 text-yellow-700' :
+                                entry.type === 'speaking' ? 'bg-yellow-100 text-yellow-700' :
                                 'bg-gray-100 text-gray-700'
                               }`}>
                                 {entry.type}
@@ -1133,31 +1089,28 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
               </div>
             </div>
 
-            {/* Notes and Debug Section */}
-            <div className="space-y-6">
-              {/* Notes */}
-              <div className="bg-white rounded-2xl shadow-lg p-6">
-                <div className="flex items-center mb-4">
-                  <FileText className="w-5 h-5 text-gray-600 mr-2" />
-                  <h3 className="text-lg font-semibold text-gray-900">Interview Notes</h3>
-                </div>
-                
-                <textarea
-                  ref={notesRef}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Jot down key points, thoughts, or reminders during the voice interview..."
-                  className="w-full h-32 px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors"
-                />
-                
-                <div className="mt-4 text-xs text-gray-500">
-                  Your notes will be saved and available in the analytics section.
-                </div>
+            {/* Notes Section */}
+            <div className="bg-white rounded-2xl shadow-lg p-6">
+              <div className="flex items-center mb-4">
+                <FileText className="w-5 h-5 text-gray-600 mr-2" />
+                <h3 className="text-lg font-semibold text-gray-900">Interview Notes</h3>
+              </div>
+              
+              <textarea
+                ref={notesRef}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Jot down key points, thoughts, or reminders during the voice interview..."
+                className="w-full h-64 px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors"
+              />
+              
+              <div className="mt-4 text-xs text-gray-500">
+                Your notes will be saved and available in the analytics section.
               </div>
 
               {/* AI Status */}
-              <div className="bg-white rounded-2xl shadow-lg p-6">
-                <h4 className="font-medium text-purple-900 mb-4">{aiAgentStatus?.provider?.toUpperCase() || 'AI'} Status</h4>
+              <div className="mt-6 p-4 bg-purple-50 rounded-xl">
+                <h4 className="font-medium text-purple-900 mb-2">{aiAgentStatus?.provider?.toUpperCase() || 'AI'} Status</h4>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-purple-700">LiveKit:</span>
@@ -1206,23 +1159,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                   )}
                 </div>
               </div>
-
-              {/* Audio Debug Info */}
-              {Object.keys(audioDebugInfo).length > 0 && (
-                <div className="bg-white rounded-2xl shadow-lg p-6">
-                  <h4 className="font-medium text-gray-900 mb-4">Audio Debug Info</h4>
-                  <div className="space-y-1 text-xs">
-                    {Object.entries(audioDebugInfo).map(([key, value]) => (
-                      <div key={key} className="flex justify-between">
-                        <span className="text-gray-600">{key}:</span>
-                        <span className="text-gray-900 font-mono">
-                          {typeof value === 'string' ? value : JSON.stringify(value)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -1230,3 +1166,5 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     </div>
   );
 };
+
+

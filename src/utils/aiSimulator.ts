@@ -1,5 +1,6 @@
-import { InterviewConfig, Question, InterviewResponse } from '../types';
-import type { AnalyticsData } from '../types';
+// Update the import path to match your actual types location
+import { InterviewConfig, Question, InterviewResponse } from '../types/index';
+import type { AnalyticsData } from '../types/index';
 import { APIService } from '../services/apiService';
 
 export class AIInterviewSimulator {

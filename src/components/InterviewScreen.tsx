@@ -21,7 +21,7 @@ import {
   Zap,
   StopCircle
 } from 'lucide-react';
-import { InterviewConfig } from '../types';
+import { InterviewConfig } from '../types/index';
 import { AIInterviewSimulator } from '../utils/aiSimulator';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { APIService } from '../services/apiService';

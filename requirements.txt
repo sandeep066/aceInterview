@@ -12,23 +12,8 @@ anthropic==0.40.0
 google-generativeai==0.8.3
 
 # LiveKit integration
-# livekit==0.17.4
-# livekit-agents==0.10.4
-# LiveKit integration
-livekit==1.0.10
-livekit-agents==1.1.4
-
-# Google Cloud services
-google-cloud-speech==2.27.0
-google-cloud-texttospeech==2.21.0
-
-# Audio processing
-# numpy==1.24.3
-# scipy==1.11.4
-
-# Audio processing
-numpy==1.26.4
-scipy==1.11.4
+livekit==0.17.4
+livekit-agents
 
 # Additional utilities
 python-multipart==0.0.12

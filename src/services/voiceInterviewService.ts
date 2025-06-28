@@ -1,5 +1,5 @@
 import { APIService, toPythonInterviewConfig } from './apiService';
-import { InterviewConfig } from '../types';
+import { InterviewConfig } from '../types/index';
 
 export interface VoiceInterviewSession {
   sessionId: string;
