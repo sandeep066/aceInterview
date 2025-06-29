@@ -1,95 +1,113 @@
 """
 LiveKit Voice Agent: Joins a LiveKit room as an AI agent and converses using LLM and TTS.
-See: https://docs.livekit.io/agents/start/voice-ai/
+Docs: https://docs.livekit.io/agents/start/voice-ai/
 """
 
-import sys
 import os
-import asyncio
-
 from dotenv import load_dotenv
 
 from livekit import agents
-from livekit.agents import AgentSession, Agent, RoomInputOptions,JobProcess, RoomOutputOptions, RunContext, WorkerOptions
-from livekit.plugins import (
-    openai,
-    cartesia,
-    gladia,
-    noise_cancellation,
-    silero,
-)
-from livekit.plugins.turn_detector.multilingual import MultilingualModel
+from livekit.agents import Agent, AgentSession, RoomInputOptions, JobProcess, WorkerOptions
+
+# Import plugins from their specific packages
+try:
+    from livekit.plugins.openai import LLM as OpenAILLM
+except ImportError:
+    print("livekit-plugins-openai not installed. Install with: pip install livekit-plugins-openai")
+    exit(1)
+
+try:
+    from livekit.plugins.cartesia import TTS as CartesiaTTS
+except ImportError:
+    print("livekit-plugins-cartesia not installed. Install with: pip install livekit-plugins-cartesia")
+    exit(1)
+
+try:
+    from livekit.plugins.gladia import STT as GladiaSTT
+except ImportError:
+    print("livekit-plugins-gladia not installed. Install with: pip install livekit-plugins-gladia")
+    exit(1)
+
+try:
+    from livekit.plugins.silero import VAD as SileroVAD
+except ImportError:
+    print("livekit-plugins-silero not installed. Install with: pip install livekit-plugins-silero")
+    exit(1)
+
+try:
+    from livekit.plugins.noise_cancellation import BVC
+except ImportError:
+    print("livekit-plugins-noise-cancellation not installed. Install with: pip install livekit-plugins-noise-cancellation")
+    BVC = None
+
+try:
+    from livekit.plugins.turn_detector.multilingual import MultilingualModel
+except ImportError:
+    print("livekit-plugins-turn-detector not installed. Install with: pip install livekit-plugins-turn-detector")
+    exit(1)
 
 load_dotenv()
 
 
 class Assistant(Agent):
     def __init__(self, user_context: dict = None) -> None:
-        # You can pass user_context (e.g., interview config, user info) to the agent
         self.user_context = user_context or {}
-        instructions = "You are a expert interviewer who helps users to prepare for a Job interview."
-        # Optionally, customize instructions based on user_context
+        instructions = "You are an expert interviewer who helps users to prepare for a job interview."
         if self.user_context:
             tech = self.user_context.get("technology")
             company = self.user_context.get("company")
             experience = self.user_context.get("experience_level")
             if tech or company or experience:
-                instructions += f"The user is preparing for {tech or ''} interview at {company or ''} with experience level {experience or ''}." \
-                "Based on this information ask questions related to the interview and get the answers. "
+                instructions += (
+                    f" The user is preparing for a {tech or ''} interview at {company or ''} "
+                    f"with experience level {experience or ''}. Ask questions based on that context."
+                )
         super().__init__(instructions=instructions)
-        
+
     async def on_enter(self):
-        # You can use self.user_context here as needed
-        self.session.generate_reply()
+        await self.session.generate_reply()
 
 
 def prewarm(proc: JobProcess):
-    proc.userdata["vad"] = silero.VAD.load()
+    # Preload VAD model once per process
+    proc.userdata["vad"] = SileroVAD.load()
 
 
 async def entrypoint(ctx: agents.JobContext):
-    # Example: get custom info from environment variables (set by backend)
     user_context = {
         "technology": os.getenv("INTERVIEW_TECHNOLOGY"),
         "company": os.getenv("INTERVIEW_COMPANY"),
         "experience_level": os.getenv("INTERVIEW_EXPERIENCE"),
-        # Add more as needed
     }
+
+    # Build room input options
+    room_input_options = RoomInputOptions()
+    if BVC:
+        room_input_options.noise_cancellation = BVC()
+
     session = AgentSession(
-        stt=gladia.STT(),
-        llm=openai.LLM(model="gpt-4o-mini"),
-        tts=cartesia.TTS(model="sonic-2", voice="f786b574-daa5-4673-aa0c-cbe3e8534c02"),
-        vad=silero.VAD.load(),
+        stt=GladiaSTT(),
+        llm=OpenAILLM(model="gpt-4o-mini"),
+        tts=CartesiaTTS(model="sonic-2", voice="f786b574-daa5-4673-aa0c-cbe3e8534c02"),
+        vad=ctx.proc.userdata.get("vad") or SileroVAD.load(),
         turn_detection=MultilingualModel(),
     )
 
     await session.start(
         room=ctx.room,
         agent=Assistant(user_context=user_context),
-        room_input_options=RoomInputOptions(
-            # LiveKit Cloud enhanced noise cancellation
-            # - If self-hosting, omit this parameter
-            # - For telephony applications, use `BVCTelephony` for best results
-            noise_cancellation=noise_cancellation.BVC(), 
-        ),
+        room_input_options=room_input_options,
     )
 
     await ctx.connect()
 
-    await session.generate_reply(
-        instructions="Greet the user and offer your assistance."
-    )
+    await session.generate_reply("Greet the user and offer your assistance.")
+
 
 if __name__ == "__main__":
-    # Ensure the agent is started with the correct command, e.g.:
-    # python livekit_voice_agent.py start
-    #import sys
-    #if len(sys.argv) > 1 and sys.argv[1] == "start":
-    agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))
-    #else:
-    #    print("Usage: python livekit_voice_agent.py start")
-    #    sys.exit(1)
-    #     env={**os.environ, "LIVEKIT_ROOM_NAME": room_name, "LIVEKIT_AGENT_TOKEN": agent_token},
-    #     ...
-    # )
-
+    agents.cli.run_app(
+        WorkerOptions(
+            entrypoint_fnc=entrypoint,
+            prewarm_fnc=prewarm,
+        )
+    )
