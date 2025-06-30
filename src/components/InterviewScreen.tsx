@@ -233,6 +233,33 @@ export const InterviewScreen: React.FC<InterviewScreenProps> = ({
           </div>
         </div>
       </div>
+      {/* Bolt Badge */}
+      <a
+        href="https://bolt.new/"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          position: 'fixed',
+          right: '2vw',
+          bottom: '2vw',
+          zIndex: 1000,
+          display: 'block',
+        }}
+        aria-label="Powered by Bolt"
+      >
+        <img
+          src="/bolt-badge.png"
+          alt="Powered by Bolt"
+          style={{
+            width: 'clamp(60px, 8vw, 100px)',
+            height: 'auto',
+            maxWidth: '100%',
+            borderRadius: '50%',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
+            background: 'white'
+          }}
+        />
+      </a>
     </div>
   );
 };
