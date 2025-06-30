@@ -41,6 +41,9 @@ performance_orchestrator: Optional[PerformanceAnalysisOrchestrator] = None
 livekit_service: Optional[LiveKitService] = None
 voice_service: Optional[VoiceInterviewService] = None
 
+# Store references to agent subprocesses by room or session if needed
+agent_processes: Dict[str, subprocess.Popen] = {}
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
@@ -218,16 +221,18 @@ async def start_voice_interview(request: VoiceInterviewStartRequest):
             env["INTERVIEW_TECHNOLOGY"] = getattr(interview_config, "topic", "")
             env["INTERVIEW_COMPANY"] = getattr(interview_config, "company_name", "")
             env["INTERVIEW_EXPERIENCE"] = getattr(interview_config, "experience_level", "")
-
+            env["INTERVIEW_DURATION"] = str(getattr(interview_config, "duration"))
             logger.info(f"LiveKit ENV for agent: LIVEKIT_WS_URL={env.get('LIVEKIT_WS_URL')}, LIVEKIT_ROOM_NAME={env.get('LIVEKIT_ROOM_NAME')}, INTERVIEW_TECHNOLOGY={env.get('INTERVIEW_TECHNOLOGY')}, INTERVIEW_COMPANY={env.get('INTERVIEW_COMPANY')}, INTERVIEW_EXPERIENCE={env.get('INTERVIEW_EXPERIENCE')}")
 
-            subprocess.Popen(
+            proc = subprocess.Popen(
                 [sys.executable, agent_script, "start"],
                 env=env,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 close_fds=True
             )
+            # Store the process by room/session for later termination
+            agent_processes[room_name] = proc
         else:
             logger.error(f"Could not launch LiveKit Voice Agent: room_name or agent_token missing in session response. room_name={room_name}, agent_token={'present' if agent_token else 'missing'}")
 
@@ -241,6 +246,35 @@ async def start_voice_interview(request: VoiceInterviewStartRequest):
     except Exception as e:
         logger.error(f"❌ Error starting voice interview: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+        
+
+
+@app.post("/api/voice-interview/end")
+async def end_voice_interview(request: VoiceInterviewStartRequest):
+    """
+    End the voice interview session and terminate the LiveKit agent.
+    """
+    try:
+        room_name = getattr(request.config, "room_name", None) or getattr(request, "room_name", None)
+        if not room_name:
+            raise HTTPException(status_code=400, detail="room_name is required to end the agent session")
+        proc = agent_processes.get(room_name)
+        if proc:
+            proc.terminate()
+            proc.wait(timeout=5)
+            del agent_processes[room_name]
+            logger.info(f"✅ Terminated agent process for room: {room_name}")
+        else:
+            logger.warning(f"No agent process found for room: {room_name}")
+        # Optionally, also call any cleanup on your VoiceInterviewService
+        if voice_service:
+            await voice_service.end_voice_interview(request)
+        return JSONResponse({"status": "ended"}, status_code=status.HTTP_200_OK)
+    except Exception as e:
+        logger.error(f"❌ Error ending voice interview: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 @app.get("/api/livekit/config")
 async def get_livekit_config():

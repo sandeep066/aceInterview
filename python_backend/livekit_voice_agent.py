@@ -2,7 +2,7 @@
 LiveKit Voice Agent: Joins a LiveKit room as an AI agent and converses using LLM and TTS.
 Docs: https://docs.livekit.io/agents/start/voice-ai/
 """
-
+import time
 import os
 from dotenv import load_dotenv
 
@@ -52,20 +52,36 @@ load_dotenv()
 class Assistant(Agent):
     def __init__(self, user_context: dict = None) -> None:
         self.user_context = user_context or {}
-        instructions = "You are an expert interviewer who helps users to prepare for a job interview."
+        instructions = "You are a expert interviewer who simulates a real interview environment hence helping users prepare for a Job interview."
         if self.user_context:
             tech = self.user_context.get("technology")
             company = self.user_context.get("company")
             experience = self.user_context.get("experience_level")
             if tech or company or experience:
                 instructions += (
-                    f" The user is preparing for a {tech or ''} interview at {company or ''} "
-                    f"with experience level {experience or ''}. Ask questions based on that context."
+                f"The user is preparing for {tech or ''} interview at {company or ''} with experience level {experience or ''}." \
+                "Based on this information ask questions related to the interview and get the answers. Once the user answers a question ask one " \
+                "followup question if it makes sense in the conversation, else proceed to ask the next question. "
                 )
         super().__init__(instructions=instructions)
 
     async def on_enter(self):
-        await self.session.generate_reply()
+        self.start_time = time.monotonic()
+
+    async def on_user_message(self, message):
+        """
+        Called when the user sends a message/answer.
+        Checks if the interview duration has elapsed and ends the session if needed.
+        """
+        # Check if duration is set and time has elapsed
+        if self.duration_minutes and self.start_time:
+            elapsed = (time.monotonic() - self.start_time) / 60
+            if elapsed >= self.duration_minutes:
+                await self.session.send_reply(
+                    "Thank you for your answer. The interview duration has ended. If you have any questions, feel free to ask!"
+                )
+                await self.session.end()
+                return
 
 
 def prewarm(proc: JobProcess):
@@ -96,7 +112,7 @@ async def entrypoint(ctx: agents.JobContext):
     await session.start(
         room=ctx.room,
         agent=Assistant(user_context=user_context),
-        room_input_options=room_input_options,
+        room_input_options=room_input_options
     )
 
     await ctx.connect()
