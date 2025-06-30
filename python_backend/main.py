@@ -77,8 +77,6 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    app.add_middleware(
-    CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",  # Vite dev
         "http://localhost:3000",  # Fallback
@@ -88,7 +86,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-)
+
 
 # Health check endpoint
 @app.get("/api/health")
