@@ -1128,7 +1128,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
         aria-label="Powered by Bolt"
       >
         <img
-          src="/bolt-badge.png"
+          src="/black_circle_360x360.png"
           alt="Powered by Bolt"
           style={{
             width: 'clamp(60px, 8vw, 100px)',
