@@ -9,5 +9,6 @@ export default defineConfig({
   preview: {
     port: parseInt(process.env.PORT ?? "4173", 10),
     host: "0.0.0.0",
+    allowedHosts: ["aceinterview-6hiu.onrender.com"],
   },
 });
