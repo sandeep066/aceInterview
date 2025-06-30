@@ -77,10 +77,17 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",  # Vite dev
+        "http://localhost:3000",  # Fallback
+        "https://aceinterview-6hiu.onrender.com"  # Render
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
 )
 
 # Health check endpoint
