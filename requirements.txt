@@ -30,3 +30,4 @@ livekit-plugins-silero==1.1.4
 livekit-plugins-noise-cancellation==0.2.3
 livekit-plugins-turn-detector==1.1.4
 livekit-plugins-google
+livekit-plugins-elevenlabs
