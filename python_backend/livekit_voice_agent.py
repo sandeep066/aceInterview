@@ -29,19 +29,6 @@ except ImportError:
     print("livekit-plugins-elevenlabs not installed. Install with: pip install livekit-plugins-cartesia")
     exit(1)
 
-
-try:
-    from livekit.plugins import google
-except ImportError:
-    print("livekit-plugins not installed. Install with: pip install livekit-plugins-google")
-    exit(1)
-
-try:
-    from livekit.plugins import elevenlabs
-except ImportError:
-    print("livekit-plugins-elevenlabs not installed. Install with: pip install livekit-plugins-elevenlabs")
-    exit(1)
-
 try:
     from livekit.plugins.gladia import STT as GladiaSTT
 except ImportError:
