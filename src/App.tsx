@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { AuthProvider } from './contexts/AuthContext';
+import { ProtectedRoute } from './components/ProtectedRoute';
 import { ConfigurationScreen } from './components/ConfigurationScreen';
 import { InterviewScreen } from './components/InterviewScreen';
 import { AnalyticsScreen } from './components/AnalyticsScreen';
@@ -34,27 +36,31 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen">
-      {currentScreen === 'config' && (
-        <ConfigurationScreen onStartInterview={handleStartInterview} />
-      )}
-      
-      {currentScreen === 'interview' && interviewConfig && (
-        <InterviewScreen
-          config={interviewConfig}
-          onEndInterview={handleEndInterview}
-          onBackToConfig={handleBackToConfig}
-        />
-      )}
-      
-      {currentScreen === 'analytics' && completedSimulator && (
-        <AnalyticsScreen
-          simulator={completedSimulator}
-          onBackToConfig={handleBackToConfig}
-          onRetryInterview={handleRetryInterview}
-        />
-      )}
-    </div>
+    <AuthProvider>
+      <div className="min-h-screen">
+        <ProtectedRoute>
+          {currentScreen === 'config' && (
+            <ConfigurationScreen onStartInterview={handleStartInterview} />
+          )}
+          
+          {currentScreen === 'interview' && interviewConfig && (
+            <InterviewScreen
+              config={interviewConfig}
+              onEndInterview={handleEndInterview}
+              onBackToConfig={handleBackToConfig}
+            />
+          )}
+          
+          {currentScreen === 'analytics' && completedSimulator && (
+            <AnalyticsScreen
+              simulator={completedSimulator}
+              onBackToConfig={handleBackToConfig}
+              onRetryInterview={handleRetryInterview}
+            />
+          )}
+        </ProtectedRoute>
+      </div>
+    </AuthProvider>
   );
 }
 
