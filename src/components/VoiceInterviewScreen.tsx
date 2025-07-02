@@ -493,7 +493,7 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     try {
       setIsThinking(true);
       setConnectionStatus('connecting');
-      setShowProviderSelection(false);
+      setShowEndConfirmation(false);
       
       console.log('[VoiceInterview] ========== STARTING VOICE INTERVIEW ==========');
       console.log('[VoiceInterview] Selected provider:', selectedProvider);
@@ -593,6 +593,15 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
       disconnectLiveKit();
     }
     
+    // Call backend to end the voice interview session (triggers agent goodbye)
+    try {
+      await fetch('/api/voice-interview/end', {
+        method: 'POST'
+      });
+    } catch (error) {
+      console.error('[VoiceInterview] Error sending end signal to backend:', error);
+    }
+
     if (voiceSession) {
       try {
         await VoiceInterviewService.endInterview(voiceSession.sessionId);
@@ -666,6 +675,23 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
       <div className="container mx-auto px-4 py-6">
         <div className="max-w-6xl mx-auto">
+
+          {/* Interview Starting Modal */}
+          {isThinking && (
+            <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+              <div className="bg-white rounded-2xl p-8 max-w-md mx-4 shadow-xl flex flex-col items-center">
+                <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4">
+                  <Loader className="w-8 h-8 animate-spin" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Interview Starting...</h3>
+                <p className="text-gray-600 mb-4 text-center">
+                  Please wait, your interview will start in a few seconds.<br />
+                  The AI interviewer is joining the meeting.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Autoplay Prompt Modal */}
           {showAutoplayPrompt && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -714,74 +740,6 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                       className="flex-1 px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors"
                     >
                       End & Analyze
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Provider Selection Modal */}
-          {showProviderSelection && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-2xl p-8 max-w-md mx-4">
-                <div className="text-center">
-                  <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Settings className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Choose AI Provider</h3>
-                  <p className="text-gray-600 mb-6">
-                    Select your preferred AI provider for the voice interview experience.
-                  </p>
-                  
-                  <div className="space-y-3 mb-6">
-                    <button
-                      onClick={() => setSelectedProvider('google')}
-                      className={`w-full p-4 rounded-xl border-2 transition-all ${
-                        selectedProvider === 'google' 
-                          ? 'border-purple-500 bg-purple-50' 
-                          : 'border-gray-200 hover:border-purple-300'
-                      }`}
-                    >
-                      <div className="flex items-center">
-                        <Brain className="w-6 h-6 text-purple-600 mr-3" />
-                        <div className="text-left">
-                          <div className="font-semibold text-gray-900">Google Cloud AI</div>
-                          <div className="text-sm text-gray-600">Advanced speech recognition & Gemini AI</div>
-                        </div>
-                      </div>
-                    </button>
-                    
-                    <button
-                      onClick={() => setSelectedProvider('openai')}
-                      className={`w-full p-4 rounded-xl border-2 transition-all ${
-                        selectedProvider === 'openai' 
-                          ? 'border-blue-500 bg-blue-50' 
-                          : 'border-gray-200 hover:border-blue-300'
-                      }`}
-                    >
-                      <div className="flex items-center">
-                        <Zap className="w-6 h-6 text-blue-600 mr-3" />
-                        <div className="text-left">
-                          <div className="font-semibold text-gray-900">OpenAI</div>
-                          <div className="text-sm text-gray-600">GPT-4 with Whisper speech processing</div>
-                        </div>
-                      </div>
-                    </button>
-                  </div>
-                  
-                  <div className="flex space-x-4">
-                    <button
-                      onClick={() => setShowProviderSelection(false)}
-                      className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-xl hover:bg-gray-300 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={startVoiceInterview}
-                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
-                    >
-                      Start Interview
                     </button>
                   </div>
                 </div>
@@ -877,7 +835,8 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
                 {!isInterviewActive ? (
                   <>
                     <button
-                      onClick={() => setShowProviderSelection(true)}
+                      // Remove onClick={() => setShowProviderSelection(true)}
+                      onClick={startVoiceInterview}
                       disabled={isThinking}
                       className="inline-flex items-center px-6 py-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-300 transition-all disabled:opacity-50"
                     >
@@ -1163,6 +1122,33 @@ export const VoiceInterviewScreen: React.FC<VoiceInterviewScreenProps> = ({
           </div>
         </div>
       </div>
+      {/* Bolt Badge */}
+      <a
+        href="https://bolt.new/"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          position: 'fixed',
+          right: '2vw',
+          bottom: '2vw',
+          zIndex: 1000,
+          display: 'block',
+        }}
+        aria-label="Powered by Bolt"
+      >
+        <img
+          src="/black_circle_360x360.png"
+          alt="Powered by Bolt"
+          style={{
+            width: 'clamp(60px, 8vw, 100px)',
+            height: 'auto',
+            maxWidth: '100%',
+            borderRadius: '50%',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
+            background: 'white'
+          }}
+        />
+      </a>
     </div>
   );
 };

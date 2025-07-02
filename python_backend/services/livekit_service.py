@@ -77,6 +77,21 @@ class LiveKitService:
             logger.error(f"[LiveKitService] Error generating access token: {error}")
             raise Exception(f"Failed to generate access token: {error}")
     
+    async def delete_room(self, room_name: str):
+        """Delete a room from the LiveKit server"""
+        if not self.is_configured():
+            raise Exception("LiveKit not configured")
+        
+        logger.info(f"[LiveKitService] Deleting room: {room_name}")
+        
+        try:
+            room_service = api.RoomService(self.api_key, self.api_secret, os.getenv("LIVEKIT_URL"))
+            await room_service.delete_room(room=room_name)
+            logger.info(f"[LiveKitService] Room deleted successfully: {room_name}")
+        except Exception as error:
+            logger.error(f"[LiveKitService] Error deleting room: {error}")
+            raise Exception(f"Failed to delete room: {error}")
+
     async def create_interview_room(
         self,
         interview_config: Dict[str, Any],

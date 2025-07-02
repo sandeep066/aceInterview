@@ -72,7 +72,7 @@ export const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({ onStar
   const selectedExperience = experienceLevels.find(level => level.value === config.experienceLevel);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 relative">
       <div className="container mx-auto px-4 py-12">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
@@ -279,6 +279,23 @@ export const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({ onStar
             </div>
           </form>
         </div>
+      </div>
+
+      {/* Bolt Badge - Fixed position in bottom right */}
+      <div className="fixed bottom-4 right-4 z-50">
+        <a
+          href="https://bolt.new/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block transition-transform hover:scale-110 focus:scale-110 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-full"
+          aria-label="Powered by Bolt"
+        >
+          <img
+            src="/black_circle_360x360.png"
+            alt="Powered by Bolt"
+            className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 rounded-full shadow-lg hover:shadow-xl transition-shadow"
+          />
+        </a>
       </div>
     </div>
   );

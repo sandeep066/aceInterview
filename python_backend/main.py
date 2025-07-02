@@ -14,12 +14,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
-from loguru import logger
+
+try:
+    from loguru import logger
+except ImportError:
+    import logging
+    logger = logging.getLogger("uvicorn.error")
+    logger.info("loguru not found, using standard logging.")
 
 from agents.orchestrator import AgenticOrchestrator
 from agents.performance_orchestrator import PerformanceAnalysisOrchestrator
 from services.livekit_service import LiveKitService
 from services.voice_interview_service import VoiceInterviewService
+
+
 from models.interview_models import (
     InterviewConfig,
     QuestionGenerationRequest,
@@ -60,11 +68,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"❌ Failed to initialize services: {e}")
         raise
-    
+
+    # Start the LiveKit agent worker as a subprocess
+    agent_script = os.path.join(os.path.dirname(__file__), "livekit_voice_agent.py")
+    agent_worker_process = subprocess.Popen([sys.executable, agent_script, "start"])
+    logger.info("✅ Started livekit_voice_agent.py as a subprocess")
+
     yield
     
-    # Cleanup
+    # Cleanup on shutdown
     logger.info("🛑 Shutting down AI Interview Platform")
+    if agent_worker_process:
+        agent_worker_process.terminate()  # Ask the agent process to stop
+        agent_worker_process.wait()       # Wait for it to finish
+        logger.info("🛑 livekit_voice_agent.py subprocess terminated")
 
 # Create FastAPI app
 app = FastAPI(
@@ -204,32 +221,41 @@ async def start_voice_interview(request: VoiceInterviewStartRequest):
             agent_provider=request.agent_provider
         )
 
-        # --- Start the LiveKit Voice Agent as a subprocess ---
+        # --- Dispatch the LiveKit Voice Agent via API ---
         room_name = session.get("room_name")
         agent_token = session.get("interviewer_token") or session.get("participant_token")
-        agent_script = os.path.join(os.path.dirname(__file__), "livekit_voice_agent.py")
         if room_name and agent_token:
-            # Extract user context from the interview config
+            import json
+            from livekit import api
+
             interview_config = request.config
-            env = os.environ.copy()
-            env["LIVEKIT_ROOM_NAME"] = room_name
-            env["LIVEKIT_AGENT_TOKEN"] = agent_token
-            # Pass user context as environment variables
-            env["INTERVIEW_TECHNOLOGY"] = getattr(interview_config, "topic", "")
-            env["INTERVIEW_COMPANY"] = getattr(interview_config, "company_name", "")
-            env["INTERVIEW_EXPERIENCE"] = getattr(interview_config, "experience_level", "")
+            job_context = {
+                "livekit_ws_url": os.environ.get("LIVEKIT_WS_URL"),
+                "livekit_room_name": room_name,
+                "livekit_agent_token": agent_token,
+                "interview_technology": getattr(interview_config, "topic", ""),
+                "interview_company": getattr(interview_config, "company_name", ""),
+                "interview_experience": getattr(interview_config, "experience_level", ""),
+                "interview_duration": str(getattr(interview_config, "duration")),
+                # Add more fields as needed
+            }
+            logger.info(f"JobContext for agent: {job_context}")
 
-            logger.info(f"LiveKit ENV for agent: LIVEKIT_WS_URL={env.get('LIVEKIT_WS_URL')}, LIVEKIT_ROOM_NAME={env.get('LIVEKIT_ROOM_NAME')}, INTERVIEW_TECHNOLOGY={env.get('INTERVIEW_TECHNOLOGY')}, INTERVIEW_COMPANY={env.get('INTERVIEW_COMPANY')}, INTERVIEW_EXPERIENCE={env.get('INTERVIEW_EXPERIENCE')}")
-
-            subprocess.Popen(
-                [sys.executable, agent_script, "start"],
-                env=env,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                close_fds=True
+            # Explicit dispatch via LiveKit API
+            agent_name = os.environ.get("LIVEKIT_AGENT_ID", "voice-agent")
+            lkapi = api.LiveKitAPI()
+            dispatch = await lkapi.agent_dispatch.create_dispatch(
+                api.CreateAgentDispatchRequest(
+                    agent_name=agent_name,
+                    room=room_name,
+                    metadata=json.dumps(job_context)
+                )
             )
+            logger.info(f"Created agent dispatch: {dispatch}")
+
+            await lkapi.aclose()
         else:
-            logger.error(f"Could not launch LiveKit Voice Agent: room_name or agent_token missing in session response. room_name={room_name}, agent_token={'present' if agent_token else 'missing'}")
+            logger.error(f"Could not dispatch LiveKit Voice Agent: room_name or agent_token missing in session response. room_name={room_name}, agent_token={'present' if agent_token else 'missing'}")
 
         # DEBUG: Print the session response to the console
         print("=== Outgoing session response ===")
@@ -241,6 +267,31 @@ async def start_voice_interview(request: VoiceInterviewStartRequest):
     except Exception as e:
         logger.error(f"❌ Error starting voice interview: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+        
+
+
+@app.post("/api/voice-interview/end")
+async def end_voice_interview(request: VoiceInterviewStartRequest):
+    """
+    End the voice interview session and terminate the LiveKit agent.
+    """
+    try:
+        room_name = getattr(request.config, "room_name", None) or getattr(request, "room_name", None)
+        if not room_name:
+            raise HTTPException(status_code=400, detail="room_name is required to end the agent session")
+        
+        # Clean up the room and any related resources
+        if voice_service:
+            await voice_service.end_voice_interview(request)
+        if livekit_service:
+            await livekit_service.delete_room(room_name)
+        
+        return JSONResponse({"status": "ended"}, status_code=200)
+    except Exception as e:
+        logger.error(f"❌ Error ending voice interview: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 @app.get("/api/livekit/config")
 async def get_livekit_config():
