@@ -13,23 +13,10 @@ from livekit.agents import Agent, AgentSession, RoomInputOptions, JobProcess, Wo
 
 # Import plugins from their specific packages
 try:
-    from livekit.plugins import openai 
-except ImportError:
-    print("livekit-plugins not installed. Install with: pip install livekit-plugins-openai")
-    exit(1)
-
-try:
     from livekit.plugins import google
 except ImportError:
     print("livekit-plugins not installed. Install with: pip install livekit-plugins-google")
     exit(1)
-
-try:
-    from livekit.plugins.cartesia import TTS as CartesiaTTS
-except ImportError:
-    print("livekit-plugins-elevenlabs not installed. Install with: pip install livekit-plugins-cartesia")
-    exit(1)
-
 
 try:
     from livekit.plugins import elevenlabs
