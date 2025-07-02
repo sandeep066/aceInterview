@@ -8,6 +8,10 @@ from dotenv import load_dotenv
 import json
 import asyncio
 
+# Suppress INFO logs from livekit.agents
+import logging
+logging.getLogger("livekit.agents").setLevel(logging.WARNING)
+
 from livekit import agents
 from livekit.agents import Agent, AgentSession, RoomInputOptions, JobProcess, WorkerOptions
 
