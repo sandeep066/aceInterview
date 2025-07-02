@@ -98,10 +98,10 @@ async def entrypoint(ctx: agents.JobContext):
 
     session = AgentSession(
         stt=GladiaSTT(),
-        llm=openai.LLM(model="gpt-4o-mini"),
-        tts=CartesiaTTS(model="sonic-2", voice="f786b574-daa5-4673-aa0c-cbe3e8534c02"),
-        #llm=google.LLM(model="gemini-2.0-flash-exp", temperature=0.8),
-        #tts=elevenlabs.TTS(voice_id="Xb7hH8MSUJpSbSDYk0k2", model="eleven_multilingual_v2"),
+        #llm=openai.LLM(model="gpt-4o-mini"),
+        #tts=CartesiaTTS(model="sonic-2", voice="f786b574-daa5-4673-aa0c-cbe3e8534c02"),
+        llm=google.LLM(model="gemini-2.0-flash-exp", temperature=0.8),
+        tts=elevenlabs.TTS(voice_id="Xb7hH8MSUJpSbSDYk0k2", model="eleven_multilingual_v2"),
         vad=silero.VAD.load(),
     )
 

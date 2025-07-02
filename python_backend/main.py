@@ -41,7 +41,8 @@ from models.interview_models import (
 load_dotenv()
 
 # Configure logging
-logger.add("logs/app.log", rotation="500 MB", level="INFO")
+log_level = "WARNING" if os.getenv("ENVIRONMENT", "development") == "production" else "INFO"
+logger.add("logs/app.log", rotation="500 MB", level=log_level)
 
 # Global services
 orchestrator: Optional[AgenticOrchestrator] = None

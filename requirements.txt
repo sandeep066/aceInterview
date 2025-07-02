@@ -23,9 +23,10 @@ livekit-agents==1.1.4
 livekit-api==1.0.3
 
 # LiveKit plugins - using ACTUAL available versions from error messages
-livekit-plugins-openai==0.8.2
-livekit-plugins-cartesia==1.1.4      # Latest available version
+
 livekit-plugins-gladia==1.1.4        # Latest available version
 livekit-plugins-silero==1.1.4
 livekit-plugins-noise-cancellation==0.2.3
-livekit-plugins-turn-detector==1.1.4
+livekit-plugins-turn-detector==1.1.5
+livekit-plugins-elevenlabs==1.1.5
+livekit-plugins-google==1.1.5
