@@ -1,3 +1,44 @@
+Removing Noise Cancellation module for optimizing. 
+
+try:
+    from livekit.plugins.noise_cancellation import BVC
+except ImportError:
+    print("livekit-plugins-noise-cancellation not installed. Install with: pip install livekit-plugins-noise-cancellation")
+    BVC = None
+
+Removed Turn Detection module from Livekit. Instead using just Silerio VAD which is light weight. 
+Doing this to optimize Memory. 
+
+try:
+    from livekit.plugins.turn_detector.english import EnglishModel
+except ImportError:
+    print("livekit-plugins-turn-detector not installed. Install with: pip install livekit-plugins-turn-detector")
+    exit(1)
+
+
+try:
+    from livekit.plugins import google
+except ImportError:
+    print("livekit-plugins not installed. Install with: pip install livekit-plugins-google")
+    exit(1)
+
+try:
+    from livekit.plugins import elevenlabs
+except ImportError:
+    print("livekit-plugins-elevenlabs not installed. Install with: pip install livekit-plugins-elevenlabs")
+    exit(1)
+
+
+Removed Reload functionality of uvicorn for production environment.  
+Need to set environment variable ENVIRONMENT=production.
+
+
+
+
+
+
+
+
 # AI Interview Practice Platform with LiveKit Voice Integration
 
 A comprehensive AI-powered interview practice application that uses Large Language Models (LLMs) and LiveKit for real-time voice interviews, generating dynamic, contextual interview questions and providing intelligent feedback.

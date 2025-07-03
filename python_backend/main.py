@@ -365,12 +365,14 @@ async def camelcase_to_snakecase_middleware(request: Request, call_next):
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     port = int(os.getenv("PORT", 3001))
+    # Only enable reload in development
+    reload_flag = os.getenv("ENVIRONMENT", "development") != "production"
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
         port=port,
-        reload=True,
+        reload=reload_flag,
         log_level="info"
     )

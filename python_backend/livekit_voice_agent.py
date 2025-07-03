@@ -41,18 +41,6 @@ except ImportError:
     print("livekit-plugins-silero not installed. Install with: pip install livekit-plugins-silero")
     exit(1)
 
-try:
-    from livekit.plugins.noise_cancellation import BVC
-except ImportError:
-    print("livekit-plugins-noise-cancellation not installed. Install with: pip install livekit-plugins-noise-cancellation")
-    BVC = None
-
-try:
-    from livekit.plugins.turn_detector.english import EnglishModel
-except ImportError:
-    print("livekit-plugins-turn-detector not installed. Install with: pip install livekit-plugins-turn-detector")
-    exit(1)
-
 load_dotenv()
 
 
