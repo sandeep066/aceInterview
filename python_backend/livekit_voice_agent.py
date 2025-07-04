@@ -6,27 +6,26 @@ Docs: https://docs.livekit.io/agents/start/voice-ai/
 import os
 from dotenv import load_dotenv
 import json
-import asyncio
 
 # Suppress INFO logs from livekit.agents
 import logging
 logging.getLogger("livekit.agents").setLevel(logging.WARNING)
 
 from livekit import agents
-from livekit.agents import Agent, AgentSession, RoomInputOptions, JobProcess, WorkerOptions
+from livekit.agents import Agent, AgentSession, WorkerOptions
 
 # Import plugins from their specific packages
 
 try:
-    from livekit.plugins import openai 
+    from livekit.plugins import google
 except ImportError:
-    print("livekit-plugins not installed. Install with: pip install livekit-plugins-openai")
+    print("livekit-plugins not installed. Install with: pip install livekit-plugins-google")
     exit(1)
-	
+
 try:
-    from livekit.plugins.cartesia import TTS as CartesiaTTS
+    from livekit.plugins import elevenlabs
 except ImportError:
-    print("livekit-plugins-elevenlabs not installed. Install with: pip install livekit-plugins-cartesia")
+    print("livekit-plugins-elevenlabs not installed. Install with: pip install livekit-plugins-elevenlabs")
     exit(1)
 
 try:
@@ -78,10 +77,10 @@ async def entrypoint(ctx: agents.JobContext):
 
     session = AgentSession(
         stt=GladiaSTT(),
-        llm=openai.LLM(model="gpt-4o-mini"),
-        tts=CartesiaTTS(model="sonic-2", voice="f786b574-daa5-4673-aa0c-cbe3e8534c02"),
-        #llm=google.LLM(model="gemini-2.0-flash-exp", temperature=0.8),
-        #tts=elevenlabs.TTS(voice_id="Xb7hH8MSUJpSbSDYk0k2", model="eleven_multilingual_v2"),
+        #llm=openai.LLM(model="gpt-4o-mini"),
+        #tts=CartesiaTTS(model="sonic-2", voice="f786b574-daa5-4673-aa0c-cbe3e8534c02"),
+        llm=google.LLM(model="gemini-2.0-flash-exp", temperature=0.8),
+        tts=elevenlabs.TTS(voice_id="Xb7hH8MSUJpSbSDYk0k2", model="eleven_multilingual_v2"),
         vad=silero.VAD.load(),
     )
 

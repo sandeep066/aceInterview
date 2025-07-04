@@ -12,7 +12,8 @@
     "agent": "node server/aiAgent.js",
     "python-server": "cd python_backend && python main.py",
     "setup-python": "cd python_backend && pip install -r ../requirements.txt",
-    "install-python": "pip install -r requirements.txt"
+    "install-python": "pip install -r requirements.txt",
+    "start": "vite build"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",

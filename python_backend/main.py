@@ -2,14 +2,24 @@
 Main FastAPI application for AI Interview Platform with Pydantic AI
 """
 import os
-import asyncio
 from contextlib import asynccontextmanager
-from typing import List, Optional, Dict, Any
+from typing import Optional
 import re
 import subprocess
 import sys  # Add this import at the top with other imports
+import tracemalloc
+import psutil
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
+tracemalloc.start()  # <-- Move this here, so it's always started
+
+def print_top_memory():
+    snapshot = tracemalloc.take_snapshot()
+    top_stats = snapshot.statistics('lineno')
+    print("[ Top 10 memory allocations ]")
+    for stat in top_stats[:10]:
+        print(stat)
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -80,8 +90,8 @@ async def lifespan(app: FastAPI):
     # Cleanup on shutdown
     logger.info("🛑 Shutting down AI Interview Platform")
     if agent_worker_process:
-        agent_worker_process.terminate()  # Ask the agent process to stop
-        agent_worker_process.wait()       # Wait for it to finish
+        agent_worker_process.terminate()
+        agent_worker_process.wait()
         logger.info("🛑 livekit_voice_agent.py subprocess terminated")
 
 # Create FastAPI app
@@ -363,10 +373,32 @@ async def camelcase_to_snakecase_middleware(request: Request, call_next):
     response = await call_next(request)
     return response
 
+@app.get("/api/debug/memory")
+async def debug_memory():
+    """
+    Return the top 10 memory allocations (by line) using tracemalloc.
+    """
+    snapshot = tracemalloc.take_snapshot()
+    top_stats = snapshot.statistics('lineno')
+    result = []
+    for stat in top_stats[:10]:
+        result.append(str(stat))
+    return {"top_memory_allocations": result}
+
+@app.get("/api/debug/process-memory")
+async def debug_process_memory():
+    """
+    Return the total memory usage (RSS) of the current process in MB.
+    """
+    process = psutil.Process(os.getpid())
+    mem_bytes = process.memory_info().rss
+    mem_mb = mem_bytes / (1024 * 1024)
+    return {"rss_mb": round(mem_mb, 2)}
+
 if __name__ == "__main__":
     import uvicorn
 
-    port = int(os.getenv("PORT", 3001))
+    port = int(os.getenv("PORT", 3001))  # Use 10000 as default, but Render sets PORT
     # Only enable reload in development
     reload_flag = os.getenv("ENVIRONMENT", "development") != "production"
     uvicorn.run(
@@ -374,5 +406,6 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=port,
         reload=reload_flag,
-        log_level="info"
+        log_level="info",
+        workers=1
     )
