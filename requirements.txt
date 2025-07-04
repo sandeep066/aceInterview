@@ -27,4 +27,5 @@ livekit-plugins-gladia==1.1.4        # Latest available version
 livekit-plugins-silero==1.1.4
 livekit-plugins-google
 livekit-plugins-elevenlabs           # Latest available version
+livekit-plugins-turn-detector==1.1.4  # Latest available version
 
