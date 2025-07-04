@@ -7,6 +7,7 @@ import os
 from dotenv import load_dotenv
 import json
 
+
 # Suppress INFO logs from livekit.agents
 import logging
 logging.getLogger("livekit.agents").setLevel(logging.WARNING)
@@ -41,7 +42,6 @@ except ImportError:
     exit(1)
 
 load_dotenv()
-
 
 class Assistant(Agent):
     def __init__(self, ctx: agents.JobContext, user_context: dict = None) -> None:
@@ -85,12 +85,10 @@ async def entrypoint(ctx: agents.JobContext):
     )
 
     await session.start(
-            room=ctx.room,
-            agent=Assistant(ctx=ctx, user_context=user_context),
-        )
+        room=ctx.room,
+        agent=Assistant(ctx=ctx, user_context=user_context),
+    )
     await ctx.connect()
-
-    await session.generate_reply()
 
 
 if __name__ == "__main__":
@@ -103,3 +101,4 @@ if __name__ == "__main__":
             api_secret=os.environ["LIVEKIT_API_SECRET"],
         )
     )
+
