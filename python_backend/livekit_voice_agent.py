@@ -88,7 +88,7 @@ async def entrypoint(ctx: agents.JobContext):
         llm=google.LLM(model="gemini-2.0-flash-exp", temperature=0.8),
         tts=elevenlabs.TTS(voice_id="Xb7hH8MSUJpSbSDYk0k2", model="eleven_multilingual_v2"),
         vad=silero.VAD.load(),
-        turn_detection=MultilingualModel(),  # Use VAD for turn detection
+        turn_detection="vad",  # Use VAD for turn detection
     )
 
     await session.start(
