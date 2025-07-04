@@ -667,38 +667,39 @@ process.on('SIGINT', async () => {
 });
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`🚀 AI Interview Backend running on port ${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
-  console.log(`ℹ️  System info: http://localhost:${PORT}/api/system/info`);
-  console.log(`🎙️ LiveKit configured: ${livekitService.isConfigured()}`);
+// Comment out or remove this block to disable the Node server
+// app.listen(PORT, () => {
+//   console.log(`🚀 AI Interview Backend running on port ${PORT}`);
+//   console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
+//   console.log(`ℹ️  System info: http://localhost:${PORT}/api/system/info`);
+//   console.log(`🎙️ LiveKit configured: ${livekitService.isConfigured()}`);
   
-  if (livekitService.isConfigured()) {
-    console.log(`🔗 LiveKit WebSocket URL: ${livekitService.wsUrl}`);
-  } else {
-    console.log(`⚠️  To enable voice interviews, configure LiveKit environment variables:`);
-    console.log(`   LIVEKIT_API_KEY=your_api_key`);
-    console.log(`   LIVEKIT_API_SECRET=your_api_secret`);
-    console.log(`   LIVEKIT_WS_URL=wss://your-livekit-server.com`);
-  }
+//   if (livekitService.isConfigured()) {
+//     console.log(`🔗 LiveKit WebSocket URL: ${livekitService.wsUrl}`);
+//   } else {
+//     console.log(`⚠️  To enable voice interviews, configure LiveKit environment variables:`);
+//     console.log(`   LIVEKIT_API_KEY=your_api_key`);
+//     console.log(`   LIVEKIT_API_SECRET=your_api_secret`);
+//     console.log(`   LIVEKIT_WS_URL=wss://your-livekit-server.com`);
+//   }
 
-  // Log LLM configuration
-  console.log(`🤖 LLM Provider: ${questionGenerator.provider?.toUpperCase() || 'NOT CONFIGURED'}`);
-  console.log(`🧠 Agentic Framework: ${questionGenerator.agenticOrchestrator ? 'ENABLED' : 'DISABLED'}`);
+//   // Log LLM configuration
+//   console.log(`🤖 LLM Provider: ${questionGenerator.provider?.toUpperCase() || 'NOT CONFIGURED'}`);
+//   console.log(`🧠 Agentic Framework: ${questionGenerator.agenticOrchestrator ? 'ENABLED' : 'DISABLED'}`);
   
-  if (questionGenerator.agenticOrchestrator) {
-    const stats = questionGenerator.getAgenticStats();
-    console.log(`📈 Agentic Stats:`, stats);
-  }
+//   if (questionGenerator.agenticOrchestrator) {
+//     const stats = questionGenerator.getAgenticStats();
+//     console.log(`📈 Agentic Stats:`, stats);
+//   }
 
-  // Log AI Agent service status
-  console.log(`🤖 AI Agent Service: ${aiAgentService.isServiceEnabled() ? 'ENABLED' : 'DISABLED'}`);
-  console.log(`🎙️ Voice Agent Provider: ${aiAgentService.getCurrentProvider().toUpperCase()}`);
+//   // Log AI Agent service status
+//   console.log(`🤖 AI Agent Service: ${aiAgentService.isServiceEnabled() ? 'ENABLED' : 'DISABLED'}`);
+//   console.log(`🎙️ Voice Agent Provider: ${aiAgentService.getCurrentProvider().toUpperCase()}`);
   
-  if (aiAgentService.isServiceEnabled()) {
-    const agentStats = aiAgentService.getServiceStats();
-    console.log(`🎙️ AI Agent Stats:`, agentStats);
-  } else {
-    console.log(`⚠️  To enable AI agents, ensure required API keys are configured`);
-  }
-});
+//   if (aiAgentService.isServiceEnabled()) {
+//     const agentStats = aiAgentService.getServiceStats();
+//     console.log(`🎙️ AI Agent Stats:`, agentStats);
+//   } else {
+//     console.log(`⚠️  To enable AI agents, ensure required API keys are configured`);
+//   }
+// });
