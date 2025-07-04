@@ -116,6 +116,11 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+def root():
+    """Root endpoint for platform health checks (for cloud providers)"""
+    return health_check()
+
 # Health check endpoint
 @app.get("/api/health")
 def health_check():
