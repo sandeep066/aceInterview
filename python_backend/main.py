@@ -403,8 +403,7 @@ async def debug_process_memory():
 if __name__ == "__main__":
     import uvicorn
 
-    port = int(os.getenv("PORT", 3001))  # Use 10000 as default, but Render sets PORT
-    # Only enable reload in development
+    port = int(os.getenv("PORT"))  # Only use the port Render provides
     reload_flag = os.getenv("ENVIRONMENT", "development") != "production"
     uvicorn.run(
         "main:app",
