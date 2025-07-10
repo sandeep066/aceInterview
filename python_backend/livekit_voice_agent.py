@@ -6,6 +6,7 @@ Docs: https://docs.livekit.io/agents/start/voice-ai/
 import os
 from dotenv import load_dotenv
 import json
+import time
 
 
 # Suppress INFO logs from livekit.agents
@@ -66,6 +67,23 @@ class Assistant(Agent):
 
     async def on_enter(self):
         await self.session.generate_reply()
+        self.start_time = time.monotonic()
+
+    async def on_user_message(self, message):
+        """
+        Called when the user sends a message/answer.
+        Checks if the interview duration has elapsed and ends the session if needed.
+        """
+        # Check if duration is set and time has elapsed
+        if self.duration_minutes and self.start_time:
+            elapsed = (time.monotonic() - self.start_time) / 60
+            if elapsed >= self.duration_minutes:
+                await self.session.generate_reply(
+                    "Thank you for your answer. The interview duration has ended best of luck for your interview!"
+                )
+                await self.session.end()
+                self.ctx.shutdown()
+                return
 
 async def entrypoint(ctx: agents.JobContext):
     user_context = {}

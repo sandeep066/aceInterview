@@ -33,3 +33,4 @@ Lib
 Scripts
 # Python cache files
 __pycache__/    
+pip.txt
