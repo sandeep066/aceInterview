@@ -29,4 +29,5 @@ livekit-plugins-silero==1.1.4
 livekit-plugins-google
 livekit-plugins-elevenlabs           # Latest available version
 livekit-plugins-turn-detector        # Latest available version
+livekit-plugins-silero
 
