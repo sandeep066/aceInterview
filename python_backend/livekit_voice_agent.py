@@ -18,7 +18,7 @@ from livekit.agents import Agent, AgentSession, WorkerOptions
 # Import plugins from their specific packages
 #  Adding English Turn detector model
 try:
-    from livekit.plugins.turn_detector.multilingual import MultilingualModel
+    from livekit.plugins.turn_detector.english import EnglishModel
 except ImportError:
     print("livekit-plugins-turn-detector not installed. Install with: pip install livekit-plugins-turn-detector")
     exit(1)
@@ -62,7 +62,7 @@ class Assistant(Agent):
         if tech or company or experience:
             instructions += (
                 f" The user is preparing for a {tech or ''} interview at {company or 'a company'} with experience level {experience or 'unspecified'}."
-                " Ask relevant interview questions. After each answer, ask a follow-up if appropriate, then continue with the next."
+                " Ask relevant interview questions. After each answer, ask a quick follow-up if appropriate, then continue with the next question for the interview."
             )
         super().__init__(instructions=instructions)
         try:
@@ -88,7 +88,7 @@ async def entrypoint(ctx: agents.JobContext):
         llm=google.LLM(model="gemini-2.0-flash-exp", temperature=0.8),
         tts=elevenlabs.TTS(voice_id="Xb7hH8MSUJpSbSDYk0k2", model="eleven_multilingual_v2"),
         vad=silero.VAD.load(),
-        turn_detection="vad",  # Use VAD for turn detection
+        turn_detection=EnglishModel(),  # Use VAD for turn detection
     )
 
     await session.start(
