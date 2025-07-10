@@ -16,12 +16,6 @@ from livekit import agents
 from livekit.agents import Agent, AgentSession, WorkerOptions
 
 # Import plugins from their specific packages
-#  Adding English Turn detector model
-try:
-    from livekit.plugins.turn_detector.english import EnglishModel
-except ImportError:
-    print("livekit-plugins-turn-detector not installed. Install with: pip install livekit-plugins-turn-detector")
-    exit(1)
 
 try:
     from livekit.plugins import google
@@ -88,7 +82,7 @@ async def entrypoint(ctx: agents.JobContext):
         llm=google.LLM(model="gemini-2.0-flash-exp", temperature=0.8),
         tts=elevenlabs.TTS(voice_id="Xb7hH8MSUJpSbSDYk0k2", model="eleven_multilingual_v2"),
         vad=silero.VAD.load(),
-        turn_detection=EnglishModel(),  # Use VAD for turn detection
+        turn_detection="vad",  # Use VAD for turn detection
     )
 
     await session.start(
