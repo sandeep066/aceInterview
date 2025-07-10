@@ -7,7 +7,6 @@ aiofiles==24.1.0
 python-multipart==0.0.12
 loguru==0.7.2
 websockets==13.1
-torch
 
 # Pydantic - exact compatible versions
 pydantic==2.10.3
